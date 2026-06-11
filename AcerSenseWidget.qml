@@ -23,8 +23,11 @@ PluginComponent {
 
     readonly property string readerPath: PluginService.pluginDirectory + "/acerSense/acer-read"
 
-    readonly property var profileValues: ["low-power", "quiet", "balanced", "balanced-performance"]
-    readonly property var profileLabels: [tr("Power Saver"), tr("Quiet"), tr("Balanced"), tr("Performance")]
+    // Fallback shown before the first read (or if the kernel doesn't expose the choices file).
+    readonly property var profileFallback: ["low-power", "quiet", "balanced", "balanced-performance"]
+    // Built from /sys/firmware/acpi/platform_profile_choices so only kernel-valid levels ever show.
+    readonly property var profileValues: root.parseProfileChoices(root.telemetry.profileChoices)
+    readonly property var profileLabels: root.profileValues.map(p => root.profileLabel(p))
 
     popoutWidth: 400
 
@@ -71,16 +74,46 @@ PluginComponent {
         return Tr.tr(k, root.lang);
     }
 
+    function parseProfileChoices(raw) {
+        const s = (raw || "").trim();
+        if (!s)
+            return root.profileFallback;
+        const list = s.split(/\s+/).filter(x => x.length > 0);
+        return list.length > 0 ? list : root.profileFallback;
+    }
+
+    function profileLabel(p) {
+        switch (p) {
+        case "low-power":
+            return tr("Power Saver");
+        case "cool":
+            return tr("Cool");
+        case "quiet":
+            return tr("Quiet");
+        case "balanced":
+            return tr("Balanced");
+        case "balanced-performance":
+            return tr("Performance");
+        case "performance":
+            return tr("Turbo");
+        }
+        return p;
+    }
+
     function profileIcon(p) {
         switch (p) {
         case "low-power":
             return "energy_savings_leaf";
+        case "cool":
+            return "ac_unit";
         case "quiet":
             return "bedtime";
         case "balanced":
             return "balance";
         case "balanced-performance":
             return "bolt";
+        case "performance":
+            return "rocket_launch";
         }
         return "tune";
     }
@@ -111,8 +144,29 @@ PluginComponent {
         ctlProcess.command = ["sudo", "-n", "/usr/local/bin/acer-ctl"].concat(args);
         ctlProcess.running = true;
     }
+    // platform_profile (Acer firmware) and power-profiles-daemon (CPU EPP) are two independent
+    // knobs. The widget is the single control: picking a level drives BOTH so they never diverge.
+    function ppdForProfile(p) {
+        switch (p) {
+        case "low-power":
+        case "quiet":
+            return "power-saver";
+        case "cool":
+        case "balanced":
+            return "balanced";
+        case "balanced-performance":
+        case "performance":
+            return "performance";
+        }
+        return "";
+    }
     function setProfile(p) {
         runCtl(["profile", p], "Profile: " + p);
+        const ppd = root.ppdForProfile(p);
+        if (ppd && !ppdProcess.running) {
+            ppdProcess.command = ["/usr/bin/powerprofilesctl", "set", ppd];
+            ppdProcess.running = true;
+        }
     }
     function setFan(preset) {
         if (preset === "quiet") {
@@ -212,6 +266,13 @@ PluginComponent {
                 ToastService.showError("Failed: " + ctlProcess.actionDesc, root.ctlError || ("exit " + code));
             }
         }
+    }
+
+    // Mirrors the chosen profile onto power-profiles-daemon (CPU EPP). set-profile is permitted
+    // for the active session, so no sudo is needed here.
+    Process {
+        id: ppdProcess
+        running: false
     }
 
     horizontalBarPill: Component {

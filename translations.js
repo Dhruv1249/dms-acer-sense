@@ -14,6 +14,10 @@ var strings = {
         { pt: "Balanceado", es: "Balanceado" },
     "Performance":
         { pt: "Desempenho", es: "Rendimiento" },
+    "Cool":
+        { pt: "Fresco", es: "Fresco" },
+    "Turbo":
+        { pt: "Turbo", es: "Turbo" },
     "Fans":
         { pt: "Ventoinhas", es: "Ventiladores" },
     "Battery":

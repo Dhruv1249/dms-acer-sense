@@ -54,6 +54,7 @@ if [ "$mode" = "gpu" ]; then
 fi
 
 profile=$(read_raw /sys/firmware/acpi/platform_profile)
+profileChoices=$(read_raw /sys/firmware/acpi/platform_profile_choices)
 acer=$(hwmon_by_name acer || true)
 core=$(hwmon_by_name coretemp || true)
 
@@ -83,6 +84,7 @@ fi
 printf '{'
 [ -n "$NS" ] && printf '"hasNs":true,' || printf '"hasNs":false,'
 jstr profile "$profile"; printf ','
+jstr profileChoices "$profileChoices"; printf ','
 jnum cpuTemp "$cpuTemp"; printf ','
 jnum fanCpu "$fanCpu"; printf ','
 jnum fanGpu "$fanGpu"; printf ','
