@@ -21,7 +21,12 @@ PluginComponent {
     // false only once a read confirms the sysfs node is absent (stays optimistic before first read)
     readonly property bool hasNs: root.telemetry.hasNs !== false
 
-    readonly property string readerPath: PluginService.pluginDirectory + "/acerSense/acer-read"
+    // Ask the service where we were installed instead of assuming the folder is named after the
+    // plugin id — a differently-named directory (a dev symlink, a manual clone) used to break every
+    // read with no hint as to why. getPluginPath exists since DMS 1.4.0; the old path is the
+    // fallback for the window before the manifest is registered.
+    readonly property string pluginPath: PluginService.getPluginPath(root.pluginId) || (PluginService.pluginDirectory + "/acerSense")
+    readonly property string readerPath: root.pluginPath + "/acer-read"
 
     // Bar pill text must follow the bar's own sizing rules (thickness, font scale and the
     // "Maximize Widget Text" toggle) so it matches the built-in widgets. On DMS < 1.5 the
