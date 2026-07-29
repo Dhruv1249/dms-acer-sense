@@ -23,6 +23,11 @@ PluginComponent {
 
     readonly property string readerPath: PluginService.pluginDirectory + "/acerSense/acer-read"
 
+    // Bar pill text must follow the bar's own sizing rules (thickness, font scale and the
+    // "Maximize Widget Text" toggle) so it matches the built-in widgets. On DMS < 1.5 the
+    // third argument is simply ignored, which is the pre-toggle behaviour.
+    readonly property int pillFontSize: Theme.barTextSize(root.barThickness, root.barConfig?.fontScale, root.barConfig?.maximizeWidgetText)
+
     // Fallback shown before the first read (or if the kernel doesn't expose the choices file).
     readonly property var profileFallback: ["low-power", "quiet", "balanced", "balanced-performance"]
     // Built from /sys/firmware/acpi/platform_profile_choices so only kernel-valid levels ever show.
@@ -290,7 +295,7 @@ PluginComponent {
                 text: root.pillSecondary()
                 visible: text !== ""
                 color: Theme.surfaceText
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: root.pillFontSize
                 anchors.verticalCenter: parent.verticalCenter
             }
         }
@@ -311,7 +316,7 @@ PluginComponent {
                 text: root.pillSecondary()
                 visible: text !== ""
                 color: Theme.surfaceText
-                font.pixelSize: Theme.fontSizeSmall
+                font.pixelSize: root.pillFontSize
                 anchors.horizontalCenter: parent.horizontalCenter
                 horizontalAlignment: Text.AlignHCenter
             }
