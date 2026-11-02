@@ -1,9 +1,9 @@
 {
     "id": "acerSense",
     "name": "Acer Sense",
-    "description": "Control panel for Acer Nitro/Predator laptops: power profile, fan presets, battery charge limit, USB charging and GPU mode — powered by linuwu-sense.",
-    "version": "1.2.1",
-    "author": "raphamzn",
+    "description": "Control panel for Acer Nitro/Predator laptops in Dux Shell: power profiles, custom fan control, 4-zone RGB keyboard lighting, battery calibration & limiter, LCD overdrive, boot sound, and GPU mode — powered by linuwu-sense.",
+    "version": "2.0.0",
+    "author": "Dhruv1249 (fork of raphamzn)",
     "type": "widget",
     "capabilities": ["dankbar-widget"],
     "component": "./AcerSenseWidget.qml",

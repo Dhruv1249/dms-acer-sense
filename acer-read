@@ -1,20 +1,49 @@
 #!/bin/sh
-# Telemetry reader (unprivileged) for the Acer Sense DMS plugin.
+# Telemetry reader (unprivileged) for the Acer Sense Dux Shell plugin.
 # Usage: acer-read [sysfs|gpu]
-#   sysfs  -> profile, CPU temp, fans, battery, limiter, usb_charging   (cheap; never wakes the dGPU)
-#   gpu    -> nvidia-smi (temp/power/util) + envycontrol --query         (only while the popout is open)
+#   sysfs  -> profile, CPU temp, fans, battery, limiter, usb_charging,
+#             backlight_timeout, battery_calibration, boot_animation_sound,
+#             lcd_override, four_zone_mode, per_zone_mode, turbo_state,
+#             powerSource, helper check, etc.
+#   gpu    -> nvidia-smi (temp/power/util) + envycontrol --query
 # Output: single-line JSON for JSON.parse in QML.
 set -eu
 
 mode="${1:-sysfs}"
 
-# linuwu-sense exposes either nitro_sense (Nitro) or predator_sense (Predator).
+read_raw() { cat "$1" 2>/dev/null || true; }
+
+# Locate linuwu-sense predator_sense or nitro_sense directory
 NS=""
-for d in /sys/devices/platform/acer-wmi/nitro_sense /sys/devices/platform/acer-wmi/predator_sense; do
-    [ -d "$d" ] && NS="$d" && break
+for d in /sys/devices/platform/acer-wmi/nitro_sense \
+         /sys/devices/platform/acer-wmi/predator_sense \
+         /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/nitro_sense \
+         /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/predator_sense; do
+    if [ -d "$d" ]; then
+        NS="$d"
+        break
+    fi
 done
 
-read_raw() { cat "$1" 2>/dev/null || true; }
+# Locate RGB directory (four_zoned_kb)
+RGB_DIR=""
+for d in /sys/devices/platform/acer-wmi/four_zoned_kb \
+         /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/four_zoned_kb; do
+    if [ -d "$d" ]; then
+        RGB_DIR="$d"
+        break
+    fi
+done
+
+# Locate Turbo directory (turbo_sense)
+TURBO_DIR=""
+for d in /sys/devices/platform/acer-wmi/turbo_sense \
+         /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/turbo_sense; do
+    if [ -d "$d" ]; then
+        TURBO_DIR="$d"
+        break
+    fi
+done
 
 hwmon_by_name() {
     for d in /sys/class/hwmon/hwmon*; do
@@ -27,8 +56,9 @@ hwmon_by_name() {
     return 1
 }
 
-jnum() { if [ -n "$2" ]; then printf '"%s":%s' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
-jstr() { if [ -n "$2" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
+jnum() { if [ -n "${2:-}" ]; then printf '"%s":%s' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
+jstr() { if [ -n "${2:-}" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
+jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true' "$1"; else printf '"%s":false' "$1"; fi; }
 
 if [ "$mode" = "gpu" ]; then
     gtemp=""; gpow=""; gutil=""; gmode=""
@@ -53,11 +83,12 @@ if [ "$mode" = "gpu" ]; then
     exit 0
 fi
 
+# Platform profile
 profile=$(read_raw /sys/firmware/acpi/platform_profile)
 profileChoices=$(read_raw /sys/firmware/acpi/platform_profile_choices)
-acer=$(hwmon_by_name acer || true)
-core=$(hwmon_by_name coretemp || true)
 
+# Fans and CPU Temperature
+acer=$(hwmon_by_name acer || true)
 fanCpu=""; fanGpu=""
 if [ -n "$acer" ]; then
     fanCpu=$(read_raw "$acer/fan1_input")
@@ -65,24 +96,113 @@ if [ -n "$acer" ]; then
 fi
 
 cpuTemp=""
+# Intel coretemp
+core=$(hwmon_by_name coretemp || true)
 if [ -n "$core" ]; then
     raw=$(read_raw "$core/temp1_input")
     [ -n "$raw" ] && cpuTemp=$((raw / 1000))
 fi
+# Fallback to AMD k10temp / zenpower if Intel coretemp not present
+if [ -z "$cpuTemp" ]; then
+    amd=$(hwmon_by_name k10temp || hwmon_by_name zenpower || true)
+    if [ -n "$amd" ]; then
+        raw=$(read_raw "$amd/temp1_input")
+        [ -n "$raw" ] && cpuTemp=$((raw / 1000))
+    fi
+fi
+# Fallback to thermal zone x86_pkg_temp / acpitz
+if [ -z "$cpuTemp" ]; then
+    for tz in /sys/class/thermal/thermal_zone*; do
+        [ -r "$tz/type" ] || continue
+        tz_type=$(cat "$tz/type" 2>/dev/null || true)
+        if [ "$tz_type" = "x86_pkg_temp" ] || [ "$tz_type" = "acpitz" ]; then
+            raw=$(read_raw "$tz/temp")
+            [ -n "$raw" ] && [ "$raw" -gt 0 ] && cpuTemp=$((raw / 1000)) && break
+        fi
+    done
+fi
 
-battPct=$(read_raw /sys/class/power_supply/BAT1/capacity)
-battStatus=$(read_raw /sys/class/power_supply/BAT1/status)
-battCycles=$(read_raw /sys/class/power_supply/BAT1/cycle_count)
+# Battery detection (find first available BAT*)
+battPct=""; battStatus=""; battCycles=""
+for bat in /sys/class/power_supply/BAT*; do
+    if [ -d "$bat" ]; then
+        battPct=$(read_raw "$bat/capacity")
+        battStatus=$(read_raw "$bat/status")
+        battCycles=$(read_raw "$bat/cycle_count")
+        break
+    fi
+done
 
+# AC Power detection
+powerSource="BAT"
+for ac in /sys/class/power_supply/AC* /sys/class/power_supply/ACAD* /sys/class/power_supply/ADP*; do
+    if [ -d "$ac" ] && [ -r "$ac/online" ]; then
+        if [ "$(read_raw "$ac/online")" = "1" ]; then
+            powerSource="AC"
+            break
+        fi
+    fi
+done
+
+# Linuwu-Sense core nodes
 battLimiter=""; usbCharging=""; fanSpeed=""
+backlightTimeout=""; batteryCalibration=""; bootAnimationSound=""; lcdOverride=""
 if [ -n "$NS" ]; then
     battLimiter=$(read_raw "$NS/battery_limiter")
     usbCharging=$(read_raw "$NS/usb_charging")
     fanSpeed=$(read_raw "$NS/fan_speed")
+    backlightTimeout=$(read_raw "$NS/backlight_timeout")
+    batteryCalibration=$(read_raw "$NS/battery_calibration")
+    bootAnimationSound=$(read_raw "$NS/boot_animation_sound")
+    lcdOverride=$(read_raw "$NS/lcd_override")
 fi
 
+# RGB keyboard nodes
+fourZoneMode=""; perZoneMode=""
+hasRgb="false"
+if [ -n "$RGB_DIR" ]; then
+    hasRgb="true"
+    fourZoneMode=$(read_raw "$RGB_DIR/four_zone_mode")
+    perZoneMode=$(read_raw "$RGB_DIR/per_zone_mode")
+fi
+
+# ENEK5130 2025+ keyboard controller detection
+hasEnek5130="false"
+if grep -qls "ENEK5130" /sys/class/hidraw/*/device/uevent 2>/dev/null; then
+    hasEnek5130="true"
+fi
+
+# Turbo node
+turboState=""
+hasTurbo="false"
+if [ -n "$TURBO_DIR" ] && [ -r "$TURBO_DIR/turbo_state" ]; then
+    hasTurbo="true"
+    turboState=$(read_raw "$TURBO_DIR/turbo_state")
+fi
+
+# Privileged helper detection (caches verification for 60s to prevent auth log spam)
+hasHelper="false"
+helperInstalled="false"
+if [ -x "/usr/local/bin/acer-ctl" ]; then
+    helperInstalled="true"
+    cache="/tmp/.acer_helper_ok"
+    if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -1 2>/dev/null)" ]; then
+        hasHelper="true"
+    elif sudo -n /usr/local/bin/acer-ctl ping >/dev/null 2>&1; then
+        touch "$cache" 2>/dev/null || true
+        hasHelper="true"
+    fi
+fi
+
+# Output JSON
 printf '{'
 [ -n "$NS" ] && printf '"hasNs":true,' || printf '"hasNs":false,'
+jbool hasRgb "$hasRgb"; printf ','
+jbool hasTurbo "$hasTurbo"; printf ','
+jbool hasEnek5130 "$hasEnek5130"; printf ','
+jbool hasHelper "$hasHelper"; printf ','
+jbool helperInstalled "$helperInstalled"; printf ','
+jstr powerSource "$powerSource"; printf ','
 jstr profile "$profile"; printf ','
 jstr profileChoices "$profileChoices"; printf ','
 jnum cpuTemp "$cpuTemp"; printf ','
@@ -93,5 +213,12 @@ jnum battPct "$battPct"; printf ','
 jstr battStatus "$battStatus"; printf ','
 jnum battCycles "$battCycles"; printf ','
 jnum battLimiter "$battLimiter"; printf ','
-jnum usbCharging "$usbCharging"
+jnum usbCharging "$usbCharging"; printf ','
+jnum backlightTimeout "$backlightTimeout"; printf ','
+jnum batteryCalibration "$batteryCalibration"; printf ','
+jnum bootAnimationSound "$bootAnimationSound"; printf ','
+jnum lcdOverride "$lcdOverride"; printf ','
+jstr fourZoneMode "$fourZoneMode"; printf ','
+jstr perZoneMode "$perZoneMode"; printf ','
+jnum turboState "$turboState"
 printf '}\n'

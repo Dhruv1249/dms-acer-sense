@@ -1,105 +1,142 @@
-# Acer Sense — DankMaterialShell plugin
+# Acer Sense — Dux Shell Plugin (Fork)
 
-A laptop control panel for **Acer Nitro / Predator** laptops, in your [DankMaterialShell](https://danklinux.com) bar. A pill shows the current power profile + live CPU temp; clicking it opens a popout with everything in one place.
+A comprehensive laptop control center for **Acer Nitro / Predator** laptops in your [Dux Shell](https://duxlabs.dev) (formerly DankMaterialShell / DMS) bar. A customizable bar pill displays your current power profile and live metrics; clicking it opens a feature-packed popout control center.
 
-![screenshot](screenshot.png)
+> **Fork Notice:** This repository is an expanded fork of [raphamzn/dms-acer-sense](https://github.com/raphamzn/dms-acer-sense) maintained by **[Dhruv1249](https://github.com/Dhruv1249/dms-acer-sense)**. It brings complete feature parity with the [Linuwu-Sense](https://github.com/0x7375646F/Linuwu-Sense) kernel module, including interactive 4-zone RGB keyboard control, custom fan speeds, battery calibration, LCD overdrive, boot animation sound toggles, in-extension helper setup, and AMD Ryzen CPU temperature support.
 
-## Features
+---
 
-- **Power profile** — low-power / quiet / balanced / performance (`platform_profile`)
-- **Fans** — Auto / Quiet (configurable %) / Max (`linuwu-sense` `fan_speed`)
-- **Battery** — charge level, status, cycle count, 80% charge limit toggle, USB charging while closed
-- **GPU** — current mode + temperature/usage; switch hybrid/integrated/nvidia via `envycontrol` (with confirmation)
-- Live temps & fan RPM in the popout; the bar pill content is configurable (CPU temp / fan RPM / nothing)
-- The discrete GPU is **only queried while the popout is open**, so it never gets woken from sleep just to draw the bar
+## ✨ Features
+
+- **Power Profiles** — Switch between Low-Power / Quiet / Balanced / Performance / Turbo (`platform_profile` synchronized with `power-profiles-daemon`).
+- **Fan Control** — Auto, Max, and **Custom Fan Speeds** (interactive sliders and numeric inputs with step size 5, CPU & GPU link option, and quick presets).
+- **Keyboard RGB Lighting (`four_zoned_kb`)**:
+  - **Dynamic Effects**: 8 lighting modes (Static, Breathing, Neon, Wave, Shifting, Zoom, Meteor, Twinkling) with Speed (0–9), Brightness (0–100%), Direction (L→R / R→L), and color picker presets.
+  - **Per-Zone Colors**: 4-zone interactive keyboard visualizer with individual zone color pickers, brightness control, and quick presets (Predator Cyan, Rainbow, Cyberpunk).
+  - Compatibility notice for 2025+ models using ENEK5130 i2c-HID controllers.
+- **Battery Management**:
+  - Live charge level, charging status, and cycle count.
+  - **80% Charge Limiter** toggle to preserve battery lifespan.
+  - **Battery Calibration** cycle (100% → 0% → 100%) with safety confirmation.
+  - **USB Power-off Charging** cutoff selector (Off, 10%, 20%, 30%).
+- **Display & Audio Toggles**:
+  - **LCD Overdrive** — minimize panel latency and ghosting.
+  - **Boot Animation Sound** — enable or disable startup chime.
+  - **Backlight Timeout** — turn off RGB backlight after 30 seconds of idle.
+- **Hardware Turbo Mode** — live status badge when the hardware Turbo key is engaged (`turbo_sense`).
+- **Telemetry & GPU**:
+  - Real-time CPU & GPU temperatures and fan RPMs.
+  - Intel Core (`coretemp`) and AMD Ryzen (`k10temp` / `zenpower`) CPU temperature support.
+  - Power source indicator (AC Connected vs. Battery).
+  - Discrete GPU mode switcher via `envycontrol` (hybrid, integrated, nvidia) with safety confirmation.
+  - Zero idle dGPU power drain: discrete GPU metrics are only queried while the popout is open.
+- **In-Extension Setup & Guidance**:
+  - Automatic detection of privileged helper status (`/usr/local/bin/acer-ctl`).
+  - **"Authenticate with Password"** button — one-click graphical setup using Polkit (`pkexec`).
+  - **"Copy Terminal Command"** button with clipboard integration.
+
+---
 
 ## Requirements
 
-- **DankMaterialShell** ≥ 1.4.0
-- An **Acer Nitro or Predator** laptop with the **[linuwu-sense](https://github.com/0x7375646F/Linuwu-Sense)** kernel module loaded (provides `acer-wmi` `nitro_sense` / `predator_sense` in sysfs). Without it, the profile still works but fan/battery controls won't.
-- *Optional:* `nvidia-smi` and `envycontrol` — the GPU section auto-hides if absent.
+1. **Dux Shell** (or DankMaterialShell) ≥ 1.4.0
+2. An **Acer Nitro or Predator** gaming laptop with the **[linuwu-sense](https://github.com/0x7375646F/Linuwu-Sense)** DKMS kernel module installed and loaded.
+3. *Optional:* `nvidia-smi` and `envycontrol` for discrete GPU monitoring and switching.
 
-> Tested on an Acer Nitro (ANV15-51). Predator support uses the same `linuwu-sense` interface (`predator_sense`) and is best-effort — reports welcome.
+---
 
-## Installing linuwu-sense
+## Installing `linuwu-sense` Kernel Module
 
-The fan, charge-limit and USB-charging controls write to the `acer-wmi` `nitro_sense` / `predator_sense` sysfs nodes, which are provided by the [**linuwu-sense**](https://github.com/0x7375646F/Linuwu-Sense) **DKMS kernel module**.
+The fan, RGB, battery, and display controls interface with sysfs nodes provided by the [**linuwu-sense**](https://github.com/0x7375646F/Linuwu-Sense) DKMS kernel module.
 
-**This plugin does _not_ install it for you** — a bar widget has no business compiling and loading kernel modules. Install it once yourself:
-
-**Arch / CachyOS** (AUR):
-
+**Arch Linux / CachyOS** (AUR):
 ```bash
 yay -S linuwu-sense-dkms-git      # or: paru -S linuwu-sense-dkms-git
-sudo modprobe linuwu_sense        # load now (auto-loads on boot afterwards)
+sudo modprobe linuwu_sense        # load module (auto-loads on boot)
 ```
 
-**Other distros** — build from source following the [upstream README](https://github.com/0x7375646F/Linuwu-Sense) (clone → `make` → install via DKMS so it survives kernel updates → `sudo modprobe linuwu_sense`).
-
-Verify it loaded — this directory should now exist:
-
+**Debian / Ubuntu / Other Distros**:
 ```bash
-ls /sys/devices/platform/acer-wmi/nitro_sense   # or predator_sense on a Predator
+sudo apt install linux-headers-$(uname -r) dkms
+git clone https://github.com/0x7375646F/Linuwu-Sense.git
+cd Linuwu-Sense
+sudo make install
 ```
 
-Then **restart DMS** (`dms restart`).
-
-Without the module the panel still shows the **power profile**, **battery readout** and **CPU temp**; the fan/battery/USB controls are hidden and the popout shows a notice with these install steps:
-
-![Popout without linuwu-sense — warning notice and install instructions](screenshot-no-linuwu-sense.png)
-
-## Install
-
-### Via DMS (after it's in the registry)
-
+Verify the module is loaded:
 ```bash
-dms plugins install acerSense
+ls /sys/devices/platform/acer-wmi/nitro_sense   # or predator_sense
 ```
 
-Or in DMS: **Settings (Mod+,) → Plugins → Browse → Acer Sense**.
+---
 
-### Manually
+## Installation & Setup
+
+### 1. Install Plugin
+
+Clone into your Dux Shell plugins directory:
 
 ```bash
-git clone https://github.com/raphamzn/dms-acer-sense.git \
-  ~/.config/DankMaterialShell/plugins/acerSense
+# For modern Dux Shell:
+git clone https://github.com/Dhruv1249/dms-acer-sense.git \
+  ~/.config/dms/plugins/acerSense
+
+# If your installation uses legacy DankMaterialShell paths:
+# git clone https://github.com/Dhruv1249/dms-acer-sense.git ~/.config/DankMaterialShell/plugins/acerSense
+
 dms restart
 ```
 
-### Privileged helper (required for the control buttons)
+### 2. Privileged Helper Setup (Required for Controls)
 
-Writing to `platform_profile`, `fan_speed`, `battery_limiter`, etc. needs root. A small whitelisted helper + a single `NOPASSWD` rule handle that. **Run once:**
+Writing to `platform_profile`, fan speeds, battery limiter, and RGB sysfs files requires elevated privileges. Acer Sense includes an auditable helper script (`helper/acer-ctl`) and a single `NOPASSWD` sudoers entry scoped strictly to that binary.
 
+You can set this up in **two easy ways**:
+
+#### Option A: Inside the Extension (Recommended)
+1. Open the Acer Sense popout or settings in Dux Shell.
+2. Click the **"Authenticate with Password"** button in the warning banner.
+3. Enter your password in the native Polkit prompt — setup completes automatically!
+
+#### Option B: Terminal Command
+Run the installation script once:
 ```bash
-sudo sh ~/.config/DankMaterialShell/plugins/acerSense/helper/install.sh
+sudo sh ~/.config/dms/plugins/acerSense/helper/install.sh
 ```
 
-This installs `/usr/local/bin/acer-ctl` and `/etc/sudoers.d/acer-ctl` (NOPASSWD scoped to that one binary, for the user who runs the script). Without this step the panel is **read-only** — telemetry shows, but the buttons do nothing.
+*(You can also click the "Copy Terminal Command" button in the popout to copy this exact command to your clipboard).*
 
-### Enable
+### 3. Enable in Dux Shell
 
-**Settings → Plugins → Scan for Plugins → enable Acer Sense → add `acerSense` to your DankBar.**
+1. Open Dux Shell Settings: `Mod + ,`
+2. Go to **Plugins** → **Scan for Plugins** → Enable **Acer Sense**.
+3. Add `acerSense` to your bar layout (**Appearance** → **DankBar Layout**).
+
+---
 
 ## Settings
 
-- **Language** — UI language: English (default) / Português / Español
-- **Pill content** — what shows next to the icon: CPU temp / fan RPM / nothing
-- **Fan Quiet (%)** — the speed used by the "Quiet" preset
-- **Refresh interval** — sysfs poll cadence
+- **Pill Content** — Configure what is shown next to the bar icon: CPU temp, Fan RPM, or icon only.
+- **Fan Quiet Speed (%)** — The fan percentage used by the "Quiet" preset (default: 40%).
+- **Telemetry Refresh Interval** — Sysfs polling frequency (2s, 4s, 6s, or 10s).
+- **Helper Status Card** — Visual indicator of helper installation, with one-click install and copy buttons.
 
-### Translations
-
-UI strings live in [`translations.js`](translations.js) — English keys with `pt`/`es` overrides and a `tr(key, lang)` fallback. To add a language, add its code to each entry (and to the selector in `AcerSenseSettings.qml`); PRs welcome.
+---
 
 ## Security
 
-`acer-ctl` is a ~60-line POSIX `sh` script that validates every argument against a strict whitelist before touching sysfs. The sudoers rule grants `NOPASSWD` to *that binary only*, so the surface is one auditable file. Review `helper/acer-ctl` before installing.
+`acer-ctl` is a lightweight POSIX shell script that validates every parameter against strict whitelists before touching any sysfs node. The sudoers rule grants `NOPASSWD` to `/usr/local/bin/acer-ctl` only for your user account. Review `helper/acer-ctl` and `helper/install.sh` at any time.
 
-⚠️ The **GPU switch** button actually runs `envycontrol -s <mode>`, which ends the graphics session and requires a **reboot**. Use it only when you really intend to switch.
+---
 
-## Credits
+## Credits & Acknowledgments
 
-Built for [DankMaterialShell](https://danklinux.com) by AvengeMedia. Hardware control via [Linuwu-Sense](https://github.com/0x7375646F/Linuwu-Sense).
+- **Original Author**: [raphamzn](https://github.com/raphamzn/dms-acer-sense) for creating the initial Acer Sense DMS plugin.
+- **Kernel Module**: [0x7375646F](https://github.com/0x7375646F/Linuwu-Sense) and contributors for reverse-engineering PredatorSense and creating the `linuwu-sense` Linux driver.
+- **Desktop Environment**: [Dux Labs](https://duxlabs.dev) / [AvengeMedia](https://github.com/AvengeMedia/DankMaterialShell) for Dux Shell and Quickshell.
+- **Fork Maintainer**: [Dhruv1249](https://github.com/Dhruv1249) for extended feature parity and maintenance.
+
+---
 
 ## License
 
