@@ -145,6 +145,17 @@ case "$action" in
         pattern="^[0-7],[0-9],$c100,[0-2],$c255,$c255,$c255$"
         if echo "$val" | grep -Eq "$pattern"; then
             printf '%s' "$val" > "$RGB_DIR/four_zone_mode"
+            # Mode 0 (Static): also write to per_zone_mode so Acer 4-zone hardware updates LEDs
+            case "$val" in
+                0,*)
+                    bright=$(echo "$val" | cut -d',' -f3)
+                    r=$(echo "$val" | cut -d',' -f5)
+                    g=$(echo "$val" | cut -d',' -f6)
+                    b=$(echo "$val" | cut -d',' -f7)
+                    hex=$(printf '%02x%02x%02x' "$r" "$g" "$b")
+                    printf '%s' "$hex,$hex,$hex,$hex,$bright" > "$RGB_DIR/per_zone_mode"
+                    ;;
+            esac
         else
             echo "Error: rgb-effect requires 'mode(0-7),speed(0-9),brightness(0-100),direction(0-2),r(0-255),g(0-255),b(0-255)'" >&2
             exit 1

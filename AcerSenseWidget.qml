@@ -35,6 +35,13 @@ PluginComponent {
     property bool customExplicitlyPicked: false
     property int customCpuFan: 50
     property int customGpuFan: 50
+    property bool fanCustomInitialized: false
+
+    onPopoutVisibleChanged: {
+        if (!popoutVisible) {
+            root.fanCustomInitialized = false;
+        }
+    }
 
     // RGB Controls State
     property int rgbMode: 0
@@ -88,14 +95,14 @@ PluginComponent {
 
     function scheduleRgbEffectApply() {
         if (root.rgbSyncing) return;
-        if (root.activeTab === (root.telemetry.hasRgb ? 2 : -1) && root.rgbSubTab === 0) {
+        if (root.rgbSubTab === 0) {
             rgbDebounceTimer.restart();
         }
     }
 
     function scheduleRgbZonesApply() {
         if (root.rgbSyncing) return;
-        if (root.activeTab === (root.telemetry.hasRgb ? 2 : -1) && root.rgbSubTab === 1) {
+        if (root.rgbSubTab === 1) {
             zoneDebounceTimer.restart();
         }
     }
@@ -312,7 +319,21 @@ PluginComponent {
     function applyRgbEffect(silent) {
         const isSilent = (silent !== undefined) ? silent : true;
         const rgb = root.hexToRgb(root.rgbColorHex);
-        const speed = (root.rgbMode === 0) ? 0 : Math.max(1, Math.min(9, root.rgbSpeed));
+        const hex = (root.rgbColorHex || "00aec7").replace("#", "").toLowerCase();
+        if (root.rgbMode === 0) {
+            // Mode 0 (Static): Acer 4-zone laptops require per_zone_mode to actually light the LEDs!
+            const effectArgs = ["rgb-effect", "0", "0", String(root.rgbBrightness), "0", String(rgb.r), String(rgb.g), String(rgb.b)];
+            const zoneArgs = ["rgb-zones", hex, hex, hex, hex, String(root.rgbBrightness)];
+            root.zone1Color = hex;
+            root.zone2Color = hex;
+            root.zone3Color = hex;
+            root.zone4Color = hex;
+            root.zoneBrightness = root.rgbBrightness;
+            runCtl(effectArgs, "Keyboard Static Mode", isSilent);
+            runCtl(zoneArgs, "Keyboard Static Color: #" + hex.toUpperCase(), isSilent);
+            return;
+        }
+        const speed = Math.max(1, Math.min(9, root.rgbSpeed));
         const direction = (root.rgbMode === 3 || root.rgbMode === 4) ? root.rgbDirection : 0;
         const args = ["rgb-effect", String(root.rgbMode), String(speed), String(root.rgbBrightness), String(direction), String(rgb.r), String(rgb.g), String(rgb.b)];
         runCtl(args, "Keyboard RGB Effect: " + root.rgbModes[root.rgbMode], isSilent);
@@ -416,20 +437,24 @@ PluginComponent {
                     // Sync fan state from telemetry
                     if (data.fanSpeed) {
                         if (data.fanSpeed === "0,0") {
-                            if (!root.customExplicitlyPicked)
+                            if (!root.customExplicitlyPicked && !root.popoutVisible)
                                 root.activeFanMode = "auto";
                         } else if (data.fanSpeed === "100,100") {
-                            if (!root.customExplicitlyPicked)
+                            if (!root.customExplicitlyPicked && !root.popoutVisible)
                                 root.activeFanMode = "max";
                         } else {
-                            if (!root.customExplicitlyPicked)
+                            if (!root.customExplicitlyPicked && !root.popoutVisible)
                                 root.activeFanMode = "custom";
                             const fparts = data.fanSpeed.split(",");
                             if (fparts.length >= 2) {
                                 const c = parseInt(fparts[0]) || 0;
                                 const g = parseInt(fparts[1]) || 0;
-                                if (c >= 20) root.customCpuFan = Math.round(c / 5) * 5;
-                                if (g >= 20) root.customGpuFan = Math.round(g / 5) * 5;
+                                // Only update custom fan values from hardware if popout is closed or uninitialized
+                                if (!root.popoutVisible || !root.fanCustomInitialized) {
+                                    if (c >= 20) root.customCpuFan = Math.round(c / 5) * 5;
+                                    if (g >= 20) root.customGpuFan = Math.round(g / 5) * 5;
+                                    root.fanCustomInitialized = true;
+                                }
                             }
                         }
                     }
