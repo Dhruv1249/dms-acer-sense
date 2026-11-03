@@ -268,7 +268,7 @@ PluginComponent {
 
     function copyInstallCommand() {
         const cmd = "sudo sh \"" + root.pluginPath + "/helper/install.sh\"";
-        clipboardProcess.command = ["sh", "-c", "printf '%s' \"$1\" | (wl-copy 2>/dev/null || dms clipboard copy 2>/dev/null || xclip -selection clipboard 2>/dev/null)", "--", cmd];
+        clipboardProcess.command = ["dms", "clipboard", "copy", cmd];
         clipboardProcess.running = true;
         ToastService.showInfo("Install command copied to clipboard!");
     }
