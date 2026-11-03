@@ -3,10 +3,13 @@ import Quickshell.Io
 import qs.Common
 import qs.Services
 import qs.Widgets
+import qs.DCommon.Widgets
 import qs.Modules.Plugins
 
 PluginComponent {
     id: root
+
+    layerNamespacePlugin: "acer-sense"
 
     property var telemetry: ({})
     property var gpuData: ({})
@@ -568,7 +571,7 @@ PluginComponent {
         Row {
             spacing: Theme.spacingXS
 
-            DankIcon {
+            DIcon {
                 name: root.profileIcon(root.telemetry.profile)
                 color: Theme.primary
                 size: root.iconSize
@@ -589,7 +592,7 @@ PluginComponent {
         Column {
             spacing: 1
 
-            DankIcon {
+            DIcon {
                 name: root.profileIcon(root.telemetry.profile)
                 color: Theme.primary
                 size: root.iconSize
@@ -663,7 +666,7 @@ PluginComponent {
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
 
-                                DankIcon {
+                                DIcon {
                                     name: root.telemetry.powerSource === "AC" ? "power" : (root.telemetry.battStatus === "Charging" ? "battery_charging_full" : "battery_std")
                                     size: Theme.iconSizeSmall
                                     color: root.telemetry.powerSource === "AC" ? Theme.primary : Theme.secondary
@@ -686,7 +689,7 @@ PluginComponent {
 
                             Row {
                                 spacing: Theme.spacingXS
-                                DankIcon {
+                                DIcon {
                                     name: "memory"
                                     size: Theme.iconSizeSmall
                                     color: Theme.primary
@@ -702,7 +705,7 @@ PluginComponent {
 
                             Row {
                                 spacing: Theme.spacingXS
-                                DankIcon {
+                                DIcon {
                                     name: "auto_awesome_mosaic"
                                     size: Theme.iconSizeSmall
                                     color: Theme.secondary
@@ -729,7 +732,7 @@ PluginComponent {
                                     id: turboRow
                                     anchors.centerIn: parent
                                     spacing: 2
-                                    DankIcon {
+                                    DIcon {
                                         name: "rocket_launch"
                                         size: 14
                                         color: "#FFFFFF"
@@ -785,7 +788,7 @@ PluginComponent {
                             width: parent.width
                             spacing: Theme.spacingXS
 
-                            DankIcon {
+                            DIcon {
                                 name: "warning"
                                 size: Theme.iconSizeSmall
                                 color: Theme.warning
@@ -832,7 +835,7 @@ PluginComponent {
                             width: parent.width
                             spacing: Theme.spacingXS
 
-                            DankIcon {
+                            DIcon {
                                 name: "shield"
                                 size: Theme.iconSizeSmall
                                 color: Theme.warning
@@ -879,7 +882,7 @@ PluginComponent {
                             width: parent.width
                             spacing: Theme.spacingS
 
-                            DankButton {
+                            DButton {
                                 width: (parent.width - Theme.spacingS) / 2
                                 text: "Authenticate"
                                 iconName: "key"
@@ -888,7 +891,7 @@ PluginComponent {
                                 onClicked: root.runPkexecInstall()
                             }
 
-                            DankButton {
+                            DButton {
                                 width: (parent.width - Theme.spacingS) / 2
                                 text: "Copy Command"
                                 iconName: "content_copy"
@@ -996,7 +999,7 @@ PluginComponent {
                                         anchors.left: parent.left
                                         anchors.verticalCenter: parent.verticalCenter
 
-                                        DankIcon {
+                                        DIcon {
                                             name: "memory"
                                             size: Theme.iconSizeSmall
                                             color: Theme.primary
@@ -1017,7 +1020,7 @@ PluginComponent {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
 
-                                        DankButton {
+                                        DButton {
                                             text: "-5"
                                             width: 34
                                             height: 30
@@ -1026,7 +1029,7 @@ PluginComponent {
                                             onClicked: root.setCpuFanStep(-5)
                                         }
 
-                                        DankTextField {
+                                        DTextField {
                                             width: 46
                                             text: String(root.customCpuFan)
                                             onEditingFinished: {
@@ -1048,7 +1051,7 @@ PluginComponent {
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
 
-                                        DankButton {
+                                        DButton {
                                             text: "+5"
                                             width: 34
                                             height: 30
@@ -1090,7 +1093,7 @@ PluginComponent {
                                         anchors.left: parent.left
                                         anchors.verticalCenter: parent.verticalCenter
 
-                                        DankIcon {
+                                        DIcon {
                                             name: "auto_awesome_mosaic"
                                             size: Theme.iconSizeSmall
                                             color: Theme.secondary
@@ -1111,7 +1114,7 @@ PluginComponent {
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
 
-                                        DankButton {
+                                        DButton {
                                             text: "-5"
                                             width: 34
                                             height: 30
@@ -1120,7 +1123,7 @@ PluginComponent {
                                             onClicked: root.setGpuFanStep(-5)
                                         }
 
-                                        DankTextField {
+                                        DTextField {
                                             width: 46
                                             text: String(root.customGpuFan)
                                             onEditingFinished: {
@@ -1142,7 +1145,7 @@ PluginComponent {
                                             anchors.verticalCenter: parent.verticalCenter
                                         }
 
-                                        DankButton {
+                                        DButton {
                                             text: "+5"
                                             width: 34
                                             height: 30
@@ -1203,7 +1206,7 @@ PluginComponent {
                                 }
 
                                 // Apply Button
-                                DankButton {
+                                DButton {
                                     width: parent.width
                                     text: "Apply (" + root.customCpuFan + "% CPU, " + root.customGpuFan + "% GPU)"
                                     iconName: "check"
@@ -1270,7 +1273,7 @@ PluginComponent {
 
                                 Row {
                                     width: parent.width
-                                    DankIcon {
+                                    DIcon {
                                         name: "battery_charging_full"
                                         size: Theme.iconSizeSmall
                                         color: root.telemetry.batteryCalibration === 1 ? Theme.primary : Theme.surfaceText
@@ -1297,7 +1300,7 @@ PluginComponent {
                                     spacing: Theme.spacingS
                                     visible: !panel.confirmingCalibration
 
-                                    DankButton {
+                                    DButton {
                                         text: root.telemetry.batteryCalibration === 1 ? "Stop Calibration" : "Start Calibration"
                                         iconName: root.telemetry.batteryCalibration === 1 ? "stop" : "play_arrow"
                                         backgroundColor: root.telemetry.batteryCalibration === 1 ? Theme.error : Theme.surfaceContainerHighest
@@ -1328,7 +1331,7 @@ PluginComponent {
 
                                     Row {
                                         spacing: Theme.spacingS
-                                        DankButton {
+                                        DButton {
                                             text: "Confirm Start"
                                             backgroundColor: Theme.warning
                                             textColor: "#000000"
@@ -1337,7 +1340,7 @@ PluginComponent {
                                                 panel.confirmingCalibration = false;
                                             }
                                         }
-                                        DankButton {
+                                        DButton {
                                             text: "Cancel"
                                             backgroundColor: Theme.surfaceContainerHighest
                                             textColor: Theme.surfaceText
@@ -1543,7 +1546,7 @@ PluginComponent {
                                         border.width: 1
                                     }
 
-                                    DankTextField {
+                                    DTextField {
                                         width: 80
                                         text: root.rgbColorHex.toUpperCase()
                                         onEditingFinished: {
@@ -1707,7 +1710,7 @@ PluginComponent {
                                     border.width: 1
                                 }
 
-                                DankTextField {
+                                DTextField {
                                     width: 80
                                     text: root.currentActiveZoneHex().toUpperCase()
                                     onEditingFinished: {
@@ -1781,7 +1784,7 @@ PluginComponent {
                         }
                         Row {
                             spacing: Theme.spacingXS
-                            DankButton {
+                            DButton {
                                 text: "Predator Cyan"
                                 backgroundColor: Theme.surfaceContainerHighest
                                 textColor: Theme.surfaceText
@@ -1792,7 +1795,7 @@ PluginComponent {
                                     root.zone4Color = "00aec7";
                                 }
                             }
-                            DankButton {
+                            DButton {
                                 text: "Rainbow"
                                 backgroundColor: Theme.surfaceContainerHighest
                                 textColor: Theme.surfaceText
@@ -1803,7 +1806,7 @@ PluginComponent {
                                     root.zone4Color = "aa33ff";
                                 }
                             }
-                            DankButton {
+                            DButton {
                                 text: "Cyberpunk"
                                 backgroundColor: Theme.surfaceContainerHighest
                                 textColor: Theme.surfaceText
@@ -1859,7 +1862,7 @@ PluginComponent {
 
                             Row {
                                 spacing: 4
-                                DankIcon {
+                                DIcon {
                                     name: "info"
                                     size: 16
                                     color: Theme.primary
@@ -1928,7 +1931,7 @@ PluginComponent {
                             }
                             Row {
                                 spacing: Theme.spacingS
-                                DankButton {
+                                DButton {
                                     text: "Confirm & Switch"
                                     backgroundColor: Theme.error
                                     textColor: "#FFFFFF"
@@ -1937,7 +1940,7 @@ PluginComponent {
                                         panel.pendingGpu = "";
                                     }
                                 }
-                                DankButton {
+                                DButton {
                                     text: "Cancel"
                                     backgroundColor: Theme.surfaceContainerHigh
                                     textColor: Theme.surfaceText
