@@ -23,7 +23,15 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 
 # Determine non-root target user (supports sudo and pkexec)
-USER_NAME="${SUDO_USER:-${PKEXEC_UID:+$(id -nu "$PKEXEC_UID" 2>/dev/null)}:-$(logname 2>/dev/null || id -un)}}"
+USER_NAME=""
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != "root" ]; then
+    USER_NAME="$SUDO_USER"
+elif [ -n "${PKEXEC_UID:-}" ]; then
+    USER_NAME="$(id -nu "$PKEXEC_UID" 2>/dev/null || true)"
+fi
+if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ]; then
+    USER_NAME="$(logname 2>/dev/null || id -un)"
+fi
 if [ -z "$USER_NAME" ] || [ "$USER_NAME" = "root" ]; then
     echo "Error: Could not automatically detect the non-root user. Set SUDO_USER manually: sudo SUDO_USER=username sh $0" >&2
     exit 1

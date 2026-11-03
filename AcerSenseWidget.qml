@@ -109,16 +109,33 @@ PluginComponent {
 
     Timer {
         id: rgbDebounceTimer
-        interval: 100
+        interval: 180
         repeat: false
         onTriggered: root.applyRgbEffect(true)
     }
 
     Timer {
         id: zoneDebounceTimer
-        interval: 100
+        interval: 180
         repeat: false
         onTriggered: root.applyRgbZones(true)
+    }
+
+    Timer {
+        id: ctlCooldownTimer
+        interval: 60
+        repeat: false
+        onTriggered: {
+            if (root.pendingCtlArgs) {
+                const nextArgs = root.pendingCtlArgs;
+                const nextDesc = root.pendingCtlDesc;
+                const nextSilent = root.pendingCtlSilent;
+                root.pendingCtlArgs = null;
+                root.pendingCtlDesc = "";
+                root.pendingCtlSilent = false;
+                root.runCtl(nextArgs, nextDesc, nextSilent);
+            }
+        }
     }
 
     popoutWidth: 440
@@ -321,16 +338,14 @@ PluginComponent {
         const rgb = root.hexToRgb(root.rgbColorHex);
         const hex = (root.rgbColorHex || "00aec7").replace("#", "").toLowerCase();
         if (root.rgbMode === 0) {
-            // Mode 0 (Static): Acer 4-zone laptops require per_zone_mode to actually light the LEDs!
-            const effectArgs = ["rgb-effect", "0", "0", String(root.rgbBrightness), "0", String(rgb.r), String(rgb.g), String(rgb.b)];
-            const zoneArgs = ["rgb-zones", hex, hex, hex, hex, String(root.rgbBrightness)];
+            // Mode 0 (Static): sync state variables, acer-ctl handles both four_zone_mode and per_zone_mode safely
             root.zone1Color = hex;
             root.zone2Color = hex;
             root.zone3Color = hex;
             root.zone4Color = hex;
             root.zoneBrightness = root.rgbBrightness;
-            runCtl(effectArgs, "Keyboard Static Mode", isSilent);
-            runCtl(zoneArgs, "Keyboard Static Color: #" + hex.toUpperCase(), isSilent);
+            const effectArgs = ["rgb-effect", "0", "0", String(root.rgbBrightness), "0", String(rgb.r), String(rgb.g), String(rgb.b)];
+            runCtl(effectArgs, "Keyboard Static Color: #" + hex.toUpperCase(), isSilent);
             return;
         }
         const speed = Math.max(1, Math.min(9, root.rgbSpeed));
@@ -351,7 +366,6 @@ PluginComponent {
         if (root.activeZoneIndex === 0 || root.activeZoneIndex === 2) root.zone2Color = clean;
         if (root.activeZoneIndex === 0 || root.activeZoneIndex === 3) root.zone3Color = clean;
         if (root.activeZoneIndex === 0 || root.activeZoneIndex === 4) root.zone4Color = clean;
-        root.applyRgbZones(true);
     }
 
     function currentActiveZoneHex() {
@@ -521,17 +535,9 @@ PluginComponent {
                 ToastService.showError("Failed: " + ctlProcess.actionDesc, root.ctlError || ("exit " + code));
             }
 
-            Qt.callLater(() => {
-                if (root.pendingCtlArgs) {
-                    const nextArgs = root.pendingCtlArgs;
-                    const nextDesc = root.pendingCtlDesc;
-                    const nextSilent = root.pendingCtlSilent;
-                    root.pendingCtlArgs = null;
-                    root.pendingCtlDesc = "";
-                    root.pendingCtlSilent = false;
-                    root.runCtl(nextArgs, nextDesc, nextSilent);
-                }
-            });
+            if (root.pendingCtlArgs) {
+                ctlCooldownTimer.restart();
+            }
         }
     }
 
@@ -1392,9 +1398,9 @@ PluginComponent {
                         onPicked: i => {
                             root.rgbSubTab = i;
                             if (i === 0) {
-                                root.applyRgbEffect();
+                                root.scheduleRgbEffectApply();
                             } else {
-                                root.applyRgbZones();
+                                root.scheduleRgbZonesApply();
                             }
                         }
                     }
@@ -1425,7 +1431,6 @@ PluginComponent {
                                 options: root.rgbModes
                                 onValueChanged: v => {
                                     root.rgbMode = root.rgbModes.indexOf(v);
-                                    root.applyRgbEffect();
                                 }
                             }
                         }
@@ -1450,7 +1455,6 @@ PluginComponent {
                                 options: ["0", "25", "50", "75", "100"]
                                 onValueChanged: v => {
                                     root.rgbBrightness = parseInt(v);
-                                    root.applyRgbEffect();
                                 }
                             }
                         }
@@ -1477,7 +1481,6 @@ PluginComponent {
                                 options: ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
                                 onValueChanged: v => {
                                     root.rgbSpeed = parseInt(v);
-                                    root.applyRgbEffect();
                                 }
                             }
                         }
@@ -1504,7 +1507,6 @@ PluginComponent {
                                 current: root.rgbDirection === 1 ? 0 : 1
                                 onPicked: i => {
                                     root.rgbDirection = (i === 0 ? 1 : 2);
-                                    root.applyRgbEffect();
                                 }
                             }
                         }
@@ -1548,7 +1550,6 @@ PluginComponent {
                                             const clean = text.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
                                             if (clean.length === 6) {
                                                 root.rgbColorHex = clean.toLowerCase();
-                                                root.applyRgbEffect();
                                             } else {
                                                 text = root.rgbColorHex.toUpperCase();
                                             }
@@ -1580,7 +1581,6 @@ PluginComponent {
                                         const pos = Math.max(0, Math.min(1, mouse.x / width));
                                         const c = Qt.hsva(pos, 1.0, 1.0, 1.0);
                                         root.rgbColorHex = c.toString().substring(1).toLowerCase();
-                                        root.applyRgbEffect();
                                     }
                                     onPressed: mouse => pick(mouse)
                                     onPositionChanged: mouse => { if (pressed) pick(mouse); }
@@ -1604,7 +1604,6 @@ PluginComponent {
                                             cursorShape: Qt.PointingHandCursor
                                             onClicked: {
                                                 root.rgbColorHex = modelData.hex;
-                                                root.applyRgbEffect();
                                             }
                                         }
                                     }
@@ -1791,7 +1790,6 @@ PluginComponent {
                                     root.zone2Color = "00aec7";
                                     root.zone3Color = "00aec7";
                                     root.zone4Color = "00aec7";
-                                    root.applyRgbZones();
                                 }
                             }
                             DankButton {
@@ -1803,7 +1801,6 @@ PluginComponent {
                                     root.zone2Color = "ff8800";
                                     root.zone3Color = "33ff57";
                                     root.zone4Color = "aa33ff";
-                                    root.applyRgbZones();
                                 }
                             }
                             DankButton {
@@ -1815,7 +1812,6 @@ PluginComponent {
                                     root.zone2Color = "ff00aa";
                                     root.zone3Color = "00ffff";
                                     root.zone4Color = "ff00aa";
-                                    root.applyRgbZones();
                                 }
                             }
                         }
@@ -1840,7 +1836,6 @@ PluginComponent {
                                 options: ["0", "25", "50", "75", "100"]
                                 onValueChanged: v => {
                                     root.zoneBrightness = parseInt(v);
-                                    root.applyRgbZones();
                                 }
                             }
                         }
