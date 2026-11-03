@@ -211,6 +211,27 @@ case "$action" in
         case "$val" in
             hybrid|integrated|nvidia)
                 command -v envycontrol >/dev/null 2>&1 || { echo "Error: envycontrol not found. Install envycontrol via your package manager or pip (e.g. yay -S envycontrol, dnf copr enable sunwire/envycontrol, or sudo pip install envycontrol)" >&2; exit 1; }
+
+                # Hardware safety check: check if an Intel or AMD iGPU exists on the PCI bus
+                vga_devs=$(lspci 2>/dev/null | grep -iE 'VGA compatible controller|Display controller' || true)
+                has_igpu=false
+                if printf '%s\n' "$vga_devs" | grep -qE '\b(Intel|ATI|AMD|Radeon)\b'; then
+                    has_igpu=true
+                fi
+
+                if [ "$has_igpu" = "false" ]; then
+                    if [ "$val" = "integrated" ]; then
+                        echo "Error: Cannot switch to integrated GPU because no Intel/AMD iGPU was found on the PCI bus (disabled in BIOS / Hardware MUX). Switching would disable your only display adapter and cause a black screen." >&2
+                        exit 1
+                    elif [ "$val" = "hybrid" ]; then
+                        echo "Error: Cannot switch to hybrid mode because your hardware MUX is locked to Discrete GPU Only in BIOS / PredatorSense. Change Display Mode to Dynamic / Optimus in BIOS first." >&2
+                        exit 1
+                    elif [ "$val" = "nvidia" ]; then
+                        echo "Your laptop is already running in 100% Discrete GPU Only mode via BIOS / Hardware MUX."
+                        exit 0
+                    fi
+                fi
+
                 envycontrol -s "$val" ;;
             *) echo "Error: gpu mode must be hybrid|integrated|nvidia" >&2; exit 1 ;;
         esac

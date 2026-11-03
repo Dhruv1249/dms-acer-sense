@@ -16,6 +16,7 @@ PluginComponent {
     property bool popoutVisible: false
     property string ctlError: ""
     property string gpuSwitchingTo: ""
+    property string gpuPendingRebootMode: ""
     property bool gpuRebootRequired: false
 
     readonly property string pillContent: pluginData.pillContent || "cpuTemp"
@@ -413,6 +414,7 @@ PluginComponent {
 
     function setGpu(mode) {
         root.gpuSwitchingTo = mode;
+        root.gpuPendingRebootMode = mode;
         runCtl(["gpu", mode], "GPU: " + mode + " — reboot to apply");
     }
 
@@ -548,6 +550,7 @@ PluginComponent {
                 if (root.popoutVisible)
                     root.refreshGpu();
             } else {
+                root.gpuPendingRebootMode = "";
                 ToastService.showError("Failed: " + ctlProcess.actionDesc, root.ctlError || ("exit " + code));
             }
             root.gpuSwitchingTo = "";
@@ -1997,11 +2000,73 @@ PluginComponent {
                         }
                     }
 
-                    // EnvyControl GPU Mode Switcher (only when envycontrol is installed)
+                    // Hardware MUX: Discrete GPU Direct Mode (when iGPU is disabled in BIOS / PredatorSense)
+                    Rectangle {
+                        width: parent.width
+                        visible: root.gpuData.hardwareMux === "discrete"
+                        radius: Theme.cornerRadius
+                        color: Theme.surfaceContainerHigh
+                        border.color: Theme.outlineVariant
+                        border.width: 1
+                        implicitHeight: muxCol.implicitHeight + Theme.spacingM * 2
+
+                        Column {
+                            id: muxCol
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingM
+                            spacing: Theme.spacingS
+
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spacingS
+
+                                DIcon {
+                                    name: "developer_board"
+                                    size: Theme.iconSizeSmall
+                                    color: Theme.primary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                StyledText {
+                                    text: "Hardware MUX: Discrete GPU Only"
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.weight: Font.Bold
+                                    color: Theme.surfaceText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                text: "The Intel/AMD integrated GPU is disabled in your laptop's BIOS or PredatorSense (Hardware MUX Direct Connect). Your display is wired directly to your NVIDIA GPU for peak gaming performance and lowest latency.\n\nSoftware GPU switching (Hybrid / Integrated) is unavailable while the iGPU is powered off at the hardware level. To enable Hybrid or Integrated graphics, change Display Mode to \"Dynamic / Optimus\" in your BIOS settings or PredatorSense."
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.surfaceVariantText
+                            }
+
+                            Rectangle {
+                                height: 24
+                                radius: 4
+                                color: Theme.primaryContainer
+                                implicitWidth: activeLabel.implicitWidth + Theme.spacingM * 2
+
+                                StyledText {
+                                    id: activeLabel
+                                    anchors.centerIn: parent
+                                    text: "Active: Direct NVIDIA dGPU"
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    font.weight: Font.Medium
+                                    color: Theme.onPrimaryContainer
+                                }
+                            }
+                        }
+                    }
+
+                    // EnvyControl GPU Mode Switcher (only when dual-GPU / Optimus is active and envycontrol is installed)
                     Column {
                         width: parent.width
                         spacing: Theme.spacingS
-                        visible: root.gpuData.hasEnvyControl === true
+                        visible: root.gpuData.hardwareMux !== "discrete" && root.gpuData.hasEnvyControl === true
 
                         StyledText {
                             width: parent.width
@@ -2089,7 +2154,7 @@ PluginComponent {
                                 StyledText {
                                     width: parent.width
                                     wrapMode: Text.WordWrap
-                                    text: "Graphics mode is set to '" + (root.gpuData.gpuMode || "new mode") + "'. Reboot your computer to apply the change."
+                                    text: "Graphics mode switch to '" + (root.gpuPendingRebootMode || root.gpuData.gpuMode || "selected mode") + "' configured. Reboot your computer to apply the change."
                                     font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.surfaceText
                                 }
@@ -2106,7 +2171,10 @@ PluginComponent {
                                         text: "Dismiss"
                                         backgroundColor: Theme.surfaceContainerHighest
                                         textColor: Theme.surfaceText
-                                        onClicked: root.gpuRebootRequired = false
+                                        onClicked: {
+                                            root.gpuRebootRequired = false;
+                                            root.gpuPendingRebootMode = "";
+                                        }
                                     }
                                 }
                             }
@@ -2157,10 +2225,10 @@ PluginComponent {
                         }
                     }
 
-                    // Notice if envycontrol is missing
+                    // Notice if envycontrol is missing (only when Optimus is active)
                     Rectangle {
                         width: parent.width
-                        visible: !root.gpuData.hasEnvyControl
+                        visible: root.gpuData.hardwareMux !== "discrete" && !root.gpuData.hasEnvyControl
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
                         border.color: Theme.warning

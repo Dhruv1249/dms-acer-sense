@@ -77,6 +77,37 @@ if [ "$mode" = "gpu" ]; then
         gmode=$(envycontrol --query 2>/dev/null | tr -d '[:space:]' || true)
     fi
 
+    hasIgpu="false"
+    hasDgpu="false"
+    igpuName=""
+    dgpuName=""
+    hardwareMux="dynamic"
+
+    lspci_out=$(lspci 2>/dev/null || true)
+    vga_lines=$(printf '%s\n' "$lspci_out" | grep -iE 'VGA compatible controller|Display controller|3D controller' || true)
+
+    if printf '%s\n' "$vga_lines" | grep -qE '\b(Intel|ATI|AMD|Radeon)\b'; then
+        hasIgpu="true"
+        igpuName=$(printf '%s\n' "$vga_lines" | grep -E '\b(Intel|ATI|AMD|Radeon)\b' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
+    fi
+
+    if printf '%s\n' "$vga_lines" | grep -qi 'NVIDIA'; then
+        hasDgpu="true"
+        dgpuName=$(printf '%s\n' "$vga_lines" | grep -i 'NVIDIA' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
+    fi
+
+    # Hardware MUX state:
+    # If dGPU is present but NO iGPU is detected, the laptop is in BIOS/Hardware Discrete GPU Only mode
+    # If both are present, it is in Hybrid/Optimus (Dual GPU) mode
+    # If iGPU is present but NO dGPU is detected, it is in Integrated Only mode
+    if [ "$hasDgpu" = "true" ] && [ "$hasIgpu" = "false" ]; then
+        hardwareMux="discrete"
+        gmode="discrete"
+    elif [ "$hasIgpu" = "true" ] && [ "$hasDgpu" = "false" ]; then
+        hardwareMux="integrated"
+        [ -z "$gmode" ] && gmode="integrated"
+    fi
+
     envyCmd="sudo pip install envycontrol"
     if [ -f /etc/os-release ]; then
         . /etc/os-release 2>/dev/null || true
@@ -110,6 +141,11 @@ if [ "$mode" = "gpu" ]; then
 
     printf '{'
     jbool hasEnvyControl "$hasEnvyControl"; printf ','
+    jbool hasIgpu "$hasIgpu"; printf ','
+    jbool hasDgpu "$hasDgpu"; printf ','
+    jstr hardwareMux "$hardwareMux"; printf ','
+    jstr igpuName "$igpuName"; printf ','
+    jstr dgpuName "$dgpuName"; printf ','
     jnum gpuTemp "$gtemp"; printf ','
     jnum gpuPower "$gpow"; printf ','
     jnum gpuUtil "$gutil"; printf ','
