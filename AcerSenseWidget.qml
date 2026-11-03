@@ -15,6 +15,8 @@ PluginComponent {
     property var gpuData: ({})
     property bool popoutVisible: false
     property string ctlError: ""
+    property string gpuSwitchingTo: ""
+    property bool gpuRebootRequired: false
 
     readonly property string pillContent: pluginData.pillContent || "cpuTemp"
     readonly property int pollInterval: (pluginData.pollInterval || 4) * 1000
@@ -410,6 +412,7 @@ PluginComponent {
     }
 
     function setGpu(mode) {
+        root.gpuSwitchingTo = mode;
         runCtl(["gpu", mode], "GPU: " + mode + " — reboot to apply");
     }
 
@@ -536,6 +539,9 @@ PluginComponent {
         }
         onExited: (code, status) => {
             if (code === 0) {
+                if (root.gpuSwitchingTo !== "") {
+                    root.gpuRebootRequired = true;
+                }
                 if (!ctlProcess.isSilent && ctlProcess.actionDesc)
                     ToastService.showInfo(ctlProcess.actionDesc);
                 root.refreshSysfs();
@@ -544,6 +550,7 @@ PluginComponent {
             } else {
                 ToastService.showError("Failed: " + ctlProcess.actionDesc, root.ctlError || ("exit " + code));
             }
+            root.gpuSwitchingTo = "";
 
             if (root.pendingCtlArgs) {
                 ctlCooldownTimer.restart();
@@ -571,6 +578,12 @@ PluginComponent {
 
     Process {
         id: ppdProcess
+        running: false
+    }
+
+    Process {
+        id: rebootProcess
+        command: ["systemctl", "reboot"]
         running: false
     }
 
@@ -1987,7 +2000,7 @@ PluginComponent {
                     // EnvyControl GPU Mode Switcher (only when envycontrol is installed)
                     Column {
                         width: parent.width
-                        spacing: Theme.spacingXS
+                        spacing: Theme.spacingS
                         visible: root.gpuData.hasEnvyControl === true
 
                         StyledText {
@@ -1999,9 +2012,109 @@ PluginComponent {
                             color: Theme.surfaceText
                         }
 
+                        // Switching progress card
+                        Rectangle {
+                            width: parent.width
+                            visible: root.gpuSwitchingTo !== ""
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHighest
+                            border.color: Theme.primary
+                            border.width: 1
+                            implicitHeight: switchingCol.implicitHeight + Theme.spacingM * 2
+
+                            Column {
+                                id: switchingCol
+                                anchors.fill: parent
+                                anchors.margins: Theme.spacingM
+                                spacing: Theme.spacingXS
+
+                                Row {
+                                    spacing: Theme.spacingS
+                                    DIcon {
+                                        name: "sync"
+                                        size: Theme.iconSizeSmall
+                                        color: Theme.primary
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    StyledText {
+                                        text: "Switching to '" + root.gpuSwitchingTo + "'..."
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Bold
+                                        color: Theme.surfaceText
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                StyledText {
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                    text: "EnvyControl is rebuilding kernel initramfs. Please wait (~10-15s)..."
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.surfaceVariantText
+                                }
+                            }
+                        }
+
+                        // Reboot Required Card
+                        Rectangle {
+                            width: parent.width
+                            visible: root.gpuRebootRequired && root.gpuSwitchingTo === ""
+                            radius: Theme.cornerRadius
+                            color: Theme.surfaceContainerHigh
+                            border.color: Theme.warning
+                            border.width: 1
+                            implicitHeight: rebootCol.implicitHeight + Theme.spacingM * 2
+
+                            Column {
+                                id: rebootCol
+                                anchors.fill: parent
+                                anchors.margins: Theme.spacingM
+                                spacing: Theme.spacingS
+
+                                Row {
+                                    spacing: Theme.spacingS
+                                    DIcon {
+                                        name: "restart_alt"
+                                        size: Theme.iconSizeSmall
+                                        color: Theme.warning
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                    StyledText {
+                                        text: "Reboot Required"
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Bold
+                                        color: Theme.warning
+                                        anchors.verticalCenter: parent.verticalCenter
+                                    }
+                                }
+                                StyledText {
+                                    width: parent.width
+                                    wrapMode: Text.WordWrap
+                                    text: "Graphics mode is set to '" + (root.gpuData.gpuMode || "new mode") + "'. Reboot your computer to apply the change."
+                                    font.pixelSize: Theme.fontSizeSmall
+                                    color: Theme.surfaceText
+                                }
+                                Row {
+                                    spacing: Theme.spacingS
+                                    DButton {
+                                        text: "Reboot Now"
+                                        iconName: "restart_alt"
+                                        backgroundColor: Theme.error
+                                        textColor: "#FFFFFF"
+                                        onClicked: rebootProcess.running = true
+                                    }
+                                    DButton {
+                                        text: "Dismiss"
+                                        backgroundColor: Theme.surfaceContainerHighest
+                                        textColor: Theme.surfaceText
+                                        onClicked: root.gpuRebootRequired = false
+                                    }
+                                }
+                            }
+                        }
+
                         SegSelector {
                             width: parent.width
-                            visible: panel.pendingGpu === ""
+                            visible: panel.pendingGpu === "" && root.gpuSwitchingTo === ""
                             labels: ["hybrid", "integrated", "nvidia"]
                             current: ["hybrid", "integrated", "nvidia"].indexOf(root.gpuData.gpuMode)
                             onPicked: i => {
@@ -2014,12 +2127,12 @@ PluginComponent {
                         Column {
                             width: parent.width
                             spacing: Theme.spacingXS
-                            visible: panel.pendingGpu !== ""
+                            visible: panel.pendingGpu !== "" && root.gpuSwitchingTo === ""
 
                             StyledText {
                                 width: parent.width
                                 wrapMode: Text.WordWrap
-                                text: "Switch GPU to '" + panel.pendingGpu + "'? Save your work — this ends the graphics session and requires a reboot."
+                                text: "Switch GPU to '" + panel.pendingGpu + "'? EnvyControl will rebuild the kernel initramfs (~10s). You will need to reboot to activate the new graphics mode."
                                 color: Theme.warning
                                 font.pixelSize: Theme.fontSizeSmall
                             }
