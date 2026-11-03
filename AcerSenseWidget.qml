@@ -276,6 +276,12 @@ PluginComponent {
         ToastService.showInfo("Install command copied to clipboard!");
     }
 
+    function copyEnvyInstallCommand() {
+        clipboardProcess.command = ["dms", "clipboard", "copy", "yay -S envycontrol"];
+        clipboardProcess.running = true;
+        ToastService.showInfo("Copied 'yay -S envycontrol' to clipboard!");
+    }
+
     function ppdForProfile(p) {
         switch (p) {
         case "low-power":
@@ -1892,14 +1898,101 @@ PluginComponent {
                     spacing: Theme.spacingM
                     visible: root.activeTab === (root.telemetry.hasRgb ? 3 : 2)
 
+                    // GPU Telemetry Card
+                    Rectangle {
+                        width: parent.width
+                        radius: Theme.cornerRadius
+                        color: Theme.surfaceContainerHigh
+                        implicitHeight: gpuTelemetryCol.implicitHeight + Theme.spacingM * 2
+
+                        Column {
+                            id: gpuTelemetryCol
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingM
+                            spacing: Theme.spacingS
+
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spacingXS
+
+                                DIcon {
+                                    name: "memory"
+                                    size: Theme.iconSizeSmall
+                                    color: Theme.primary
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+
+                                StyledText {
+                                    text: "Discrete NVIDIA GPU"
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.weight: Font.Bold
+                                    color: Theme.surfaceText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            Row {
+                                width: parent.width
+                                spacing: Theme.spacingM
+
+                                Column {
+                                    spacing: 2
+                                    StyledText {
+                                        text: "Temperature"
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.surfaceVariantText
+                                    }
+                                    StyledText {
+                                        text: root.gpuData.gpuTemp != null ? (root.gpuData.gpuTemp + "°C") : "—"
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Medium
+                                        color: Theme.surfaceText
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 2
+                                    StyledText {
+                                        text: "Utilization"
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.surfaceVariantText
+                                    }
+                                    StyledText {
+                                        text: root.gpuData.gpuUtil != null ? (root.gpuData.gpuUtil + "%") : "—"
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Medium
+                                        color: Theme.surfaceText
+                                    }
+                                }
+
+                                Column {
+                                    spacing: 2
+                                    StyledText {
+                                        text: "Power Draw"
+                                        font.pixelSize: Theme.fontSizeSmall
+                                        color: Theme.surfaceVariantText
+                                    }
+                                    StyledText {
+                                        text: root.gpuData.gpuPower != null ? (root.gpuData.gpuPower + " W") : "—"
+                                        font.pixelSize: Theme.fontSizeMedium
+                                        font.weight: Font.Medium
+                                        color: Theme.surfaceText
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // EnvyControl GPU Mode Switcher (only when envycontrol is installed)
                     Column {
                         width: parent.width
                         spacing: Theme.spacingXS
+                        visible: root.gpuData.hasEnvyControl === true
 
                         StyledText {
                             width: parent.width
                             elide: Text.ElideRight
-                            text: "Discrete GPU — Mode: " + (root.gpuData.gpuMode || "—") + (root.gpuData.gpuUtil != null ? " · " + root.gpuData.gpuUtil + "% usage" : "") + (root.gpuData.gpuPower != null ? " · " + root.gpuData.gpuPower + "W" : "")
+                            text: "GPU Graphics Mode (Current: " + (root.gpuData.gpuMode || "unknown") + ")"
                             font.pixelSize: Theme.fontSizeMedium
                             font.weight: Font.Medium
                             color: Theme.surfaceText
@@ -1946,6 +2039,77 @@ PluginComponent {
                                     textColor: Theme.surfaceText
                                     onClicked: panel.pendingGpu = ""
                                 }
+                            }
+                        }
+                    }
+
+                    // Notice if envycontrol is missing
+                    Rectangle {
+                        width: parent.width
+                        visible: !root.gpuData.hasEnvyControl
+                        radius: Theme.cornerRadius
+                        color: Theme.surfaceContainerHigh
+                        border.color: Theme.warning
+                        border.width: 1
+                        implicitHeight: envyCol.implicitHeight + Theme.spacingM * 2
+
+                        Column {
+                            id: envyCol
+                            anchors.fill: parent
+                            anchors.margins: Theme.spacingM
+                            spacing: Theme.spacingS
+
+                            Row {
+                                spacing: Theme.spacingXS
+                                DIcon {
+                                    name: "info"
+                                    size: Theme.iconSizeSmall
+                                    color: Theme.warning
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                                StyledText {
+                                    text: "GPU Mode Switching (EnvyControl)"
+                                    font.pixelSize: Theme.fontSizeMedium
+                                    font.weight: Font.Bold
+                                    color: Theme.surfaceText
+                                    anchors.verticalCenter: parent.verticalCenter
+                                }
+                            }
+
+                            StyledText {
+                                width: parent.width
+                                wrapMode: Text.WordWrap
+                                text: "To switch between Hybrid, Integrated, and Dedicated NVIDIA graphics modes, 'envycontrol' is required. Install it using yay or pacman:"
+                                font.pixelSize: Theme.fontSizeSmall
+                                color: Theme.surfaceVariantText
+                            }
+
+                            Rectangle {
+                                width: parent.width
+                                height: 32
+                                radius: 4
+                                color: Theme.surfaceContainerLowest
+                                border.color: Theme.outlineVariant
+                                border.width: 1
+
+                                StyledText {
+                                    anchors.left: parent.left
+                                    anchors.leftMargin: Theme.spacingS
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: "yay -S envycontrol"
+                                    font.family: "monospace"
+                                    font.pixelSize: 11
+                                    color: Theme.surfaceText
+                                }
+                            }
+
+                            DButton {
+                                width: parent.width
+                                text: "Copy Install Command"
+                                iconName: "content_copy"
+                                backgroundColor: Theme.surfaceContainerHighest
+                                textColor: Theme.surfaceText
+                                onClicked: root.copyEnvyInstallCommand()
                             }
                         }
                     }

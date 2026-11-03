@@ -210,7 +210,7 @@ case "$action" in
         val="${1:-}"
         case "$val" in
             hybrid|integrated|nvidia)
-                command -v envycontrol >/dev/null 2>&1 || { echo "Error: envycontrol not found" >&2; exit 1; }
+                command -v envycontrol >/dev/null 2>&1 || { echo "Error: envycontrol not found. Install with: yay -S envycontrol" >&2; exit 1; }
                 envycontrol -s "$val" ;;
             *) echo "Error: gpu mode must be hybrid|integrated|nvidia" >&2; exit 1 ;;
         esac

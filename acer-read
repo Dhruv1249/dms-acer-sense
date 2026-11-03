@@ -62,6 +62,7 @@ jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true
 
 if [ "$mode" = "gpu" ]; then
     gtemp=""; gpow=""; gutil=""; gmode=""
+    hasEnvyControl="false"
     if command -v nvidia-smi >/dev/null 2>&1; then
         line=$(nvidia-smi --query-gpu=temperature.gpu,power.draw,utilization.gpu \
                 --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
@@ -72,9 +73,11 @@ if [ "$mode" = "gpu" ]; then
         fi
     fi
     if command -v envycontrol >/dev/null 2>&1; then
+        hasEnvyControl="true"
         gmode=$(envycontrol --query 2>/dev/null | tr -d '[:space:]' || true)
     fi
     printf '{'
+    jbool hasEnvyControl "$hasEnvyControl"; printf ','
     jnum gpuTemp "$gtemp"; printf ','
     jnum gpuPower "$gpow"; printf ','
     jnum gpuUtil "$gutil"; printf ','
