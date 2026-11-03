@@ -76,12 +76,45 @@ if [ "$mode" = "gpu" ]; then
         hasEnvyControl="true"
         gmode=$(envycontrol --query 2>/dev/null | tr -d '[:space:]' || true)
     fi
+
+    envyCmd="sudo pip install envycontrol"
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release 2>/dev/null || true
+    fi
+    os_id="${ID:-}"
+    os_like="${ID_LIKE:-}"
+    case "$os_id $os_like" in
+        *arch*|*cachyos*|*manjaro*|*endeavouros*)
+            if command -v yay >/dev/null 2>&1; then
+                envyCmd="yay -S envycontrol"
+            elif command -v paru >/dev/null 2>&1; then
+                envyCmd="paru -S envycontrol"
+            else
+                envyCmd="yay -S envycontrol"
+            fi
+            ;;
+        *fedora*|*nobara*|*rhel*|*centos*)
+            envyCmd="sudo dnf copr enable sunwire/envycontrol && sudo dnf install python3-envycontrol"
+            ;;
+        *debian*|*ubuntu*|*pop*|*mint*)
+            if command -v pipx >/dev/null 2>&1; then
+                envyCmd="sudo pipx install envycontrol"
+            else
+                envyCmd="sudo pip install --break-system-packages envycontrol"
+            fi
+            ;;
+        *opensuse*|*suse*)
+            envyCmd="sudo zypper in python3-envycontrol || sudo pip install envycontrol"
+            ;;
+    esac
+
     printf '{'
     jbool hasEnvyControl "$hasEnvyControl"; printf ','
     jnum gpuTemp "$gtemp"; printf ','
     jnum gpuPower "$gpow"; printf ','
     jnum gpuUtil "$gutil"; printf ','
-    jstr gpuMode "$gmode"
+    jstr gpuMode "$gmode"; printf ','
+    jstr envyInstallCmd "$envyCmd"
     printf '}\n'
     exit 0
 fi

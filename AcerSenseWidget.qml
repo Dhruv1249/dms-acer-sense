@@ -277,9 +277,10 @@ PluginComponent {
     }
 
     function copyEnvyInstallCommand() {
-        clipboardProcess.command = ["dms", "clipboard", "copy", "yay -S envycontrol"];
+        const cmd = root.gpuData.envyInstallCmd || "sudo pip install envycontrol";
+        clipboardProcess.command = ["dms", "clipboard", "copy", cmd];
         clipboardProcess.running = true;
-        ToastService.showInfo("Copied 'yay -S envycontrol' to clipboard!");
+        ToastService.showInfo("Install command copied to clipboard!");
     }
 
     function ppdForProfile(p) {
@@ -814,7 +815,7 @@ PluginComponent {
                         StyledText {
                             width: parent.width
                             wrapMode: Text.WordWrap
-                            text: "Install the kernel module and reload. On Arch / CachyOS: yay -S linuwu-sense-dkms-git"
+                            text: "Install the kernel module and reload. See README for instructions (DKMS / AUR / make install)."
                             color: Theme.surfaceVariantText
                             font.pixelSize: Theme.fontSizeSmall
                         }
@@ -2079,7 +2080,7 @@ PluginComponent {
                             StyledText {
                                 width: parent.width
                                 wrapMode: Text.WordWrap
-                                text: "To switch between Hybrid, Integrated, and Dedicated NVIDIA graphics modes, 'envycontrol' is required. Install it using yay or pacman:"
+                                text: "To switch between Hybrid, Integrated, and Dedicated NVIDIA graphics modes, 'envycontrol' is required. Install it using your distribution's package manager:"
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.surfaceVariantText
                             }
@@ -2096,7 +2097,7 @@ PluginComponent {
                                     anchors.left: parent.left
                                     anchors.leftMargin: Theme.spacingS
                                     anchors.verticalCenter: parent.verticalCenter
-                                    text: "yay -S envycontrol"
+                                    text: root.gpuData.envyInstallCmd || "sudo pip install envycontrol"
                                     font.family: "monospace"
                                     font.pixelSize: 11
                                     color: Theme.surfaceText

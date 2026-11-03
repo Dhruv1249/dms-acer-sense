@@ -55,9 +55,21 @@ yay -S linuwu-sense-dkms-git      # or: paru -S linuwu-sense-dkms-git
 sudo modprobe linuwu_sense        # load module (auto-loads on boot)
 ```
 
-**Debian / Ubuntu / Other Distros**:
+**Debian / Ubuntu**:
 ```bash
 sudo apt install linux-headers-$(uname -r) dkms
+git clone https://github.com/0x7375646F/Linuwu-Sense.git
+cd Linuwu-Sense
+sudo make install
+```
+
+**Fedora / openSUSE / Other Distros**:
+```bash
+# Fedora:
+sudo dnf install kernel-devel-$(uname -r) dkms
+# openSUSE:
+sudo zypper in kernel-default-devel dkms
+
 git clone https://github.com/0x7375646F/Linuwu-Sense.git
 cd Linuwu-Sense
 sudo make install
