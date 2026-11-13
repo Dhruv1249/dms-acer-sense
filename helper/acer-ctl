@@ -3,6 +3,7 @@
 # Root-owned, allowed via NOPASSWD.
 # All value validation happens strictly here via whitelists.
 set -eu
+export PATH="/usr/sbin:/usr/bin:/sbin:/bin"
 
 PROFILE_SYS=/sys/firmware/acpi/platform_profile
 

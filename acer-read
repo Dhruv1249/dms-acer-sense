@@ -53,9 +53,11 @@ jstr() { if [ -n "${2:-}" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s
 jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true' "$1"; else printf '"%s":false' "$1"; fi; }
 
 if [ "$mode" = "gpu" ]; then
-    runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
-    [ -d "$runtime_dir" ] && [ -w "$runtime_dir" ] || runtime_dir="/tmp"
-    gpu_cache="$runtime_dir/.acer_gpu_static"
+    runtime_dir="${XDG_RUNTIME_DIR:-}"
+    gpu_cache=""
+    if [ -n "$runtime_dir" ] && [ -d "$runtime_dir" ] && [ -w "$runtime_dir" ]; then
+        gpu_cache="$runtime_dir/.acer_gpu_static"
+    fi
 
     hasIgpu="false"
     hasDgpu="false"
@@ -65,8 +67,21 @@ if [ "$mode" = "gpu" ]; then
     hasEnvyControl="false"
     envyCmd="sudo pip install envycontrol"
 
-    if [ -f "$gpu_cache" ]; then
-        . "$gpu_cache" 2>/dev/null || true
+    if [ -n "$gpu_cache" ] && [ -f "$gpu_cache" ]; then
+        while IFS='=' read -r key val || [ -n "$key" ]; do
+            # Strip surrounding quotes if present
+            val="${val%\"}"
+            val="${val#\"}"
+            case "$key" in
+                hasIgpu) hasIgpu="$val" ;;
+                hasDgpu) hasDgpu="$val" ;;
+                hardwareMux) hardwareMux="$val" ;;
+                igpuName) igpuName="$val" ;;
+                dgpuName) dgpuName="$val" ;;
+                hasEnvyControl) hasEnvyControl="$val" ;;
+                envyCmd) envyCmd="$val" ;;
+            esac
+        done < "$gpu_cache"
     else
         if command -v envycontrol >/dev/null 2>&1; then
             hasEnvyControl="true"
@@ -121,8 +136,9 @@ if [ "$mode" = "gpu" ]; then
                 ;;
         esac
 
-        # Save to cache
-        cat <<EOF > "$gpu_cache" 2>/dev/null || true
+        # Save to cache if runtime dir is available
+        if [ -n "$gpu_cache" ]; then
+            cat <<EOF > "$gpu_cache" 2>/dev/null || true
 hasIgpu="$hasIgpu"
 hasDgpu="$hasDgpu"
 hardwareMux="$hardwareMux"
@@ -131,6 +147,7 @@ dgpuName="$dgpuName"
 hasEnvyControl="$hasEnvyControl"
 envyCmd="$envyCmd"
 EOF
+        fi
     fi
 
     gtemp=""; gpow=""; gutil=""; gmode=""
@@ -210,10 +227,11 @@ profileChoices=$(read_raw /sys/firmware/acpi/platform_profile_choices)
 
 # Fans and CPU Temperature
 acer=$(hwmon_by_name acer || true)
-fanCpu=""; fanGpu=""
+fanCpu=""; fanGpu=""; fanHwmonPath=""
 if [ -n "$acer" ]; then
     fanCpu=$(read_raw "$acer/fan1_input")
     fanGpu=$(read_raw "$acer/fan2_input")
+    [ -r "$acer/fan1_input" ] && fanHwmonPath="$acer/fan1_input"
 fi
 
 cpuTemp=""
@@ -282,16 +300,18 @@ fi
 # Privileged helper detection (cached in $XDG_RUNTIME_DIR to prevent auth log spam)
 hasHelper="false"
 helperInstalled="false"
-runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
-[ -d "$runtime_dir" ] && [ -w "$runtime_dir" ] || runtime_dir="/tmp"
-cache="$runtime_dir/.acer_helper_ok"
-if [ -f "$cache" ]; then
+runtime_dir="${XDG_RUNTIME_DIR:-}"
+cache=""
+if [ -n "$runtime_dir" ] && [ -d "$runtime_dir" ] && [ -w "$runtime_dir" ]; then
+    cache="$runtime_dir/.acer_helper_ok"
+fi
+if [ -n "$cache" ] && [ -f "$cache" ]; then
     hasHelper="true"
     helperInstalled="true"
 elif [ -x "/usr/local/bin/acer-ctl" ]; then
     helperInstalled="true"
     if sudo -n /usr/local/bin/acer-ctl ping >/dev/null 2>&1; then
-        touch "$cache" 2>/dev/null || true
+        [ -n "$cache" ] && touch "$cache" 2>/dev/null || true
         hasHelper="true"
     fi
 fi
@@ -309,6 +329,7 @@ jstr profileChoices "$profileChoices"; printf ','
 jnum cpuTemp "$cpuTemp"; printf ','
 jnum fanCpu "$fanCpu"; printf ','
 jnum fanGpu "$fanGpu"; printf ','
+jstr fanHwmonPath "$fanHwmonPath"; printf ','
 jstr fanSpeed "$fanSpeed"; printf ','
 jnum battLimiter "$battLimiter"; printf ','
 jnum usbCharging "$usbCharging"; printf ','

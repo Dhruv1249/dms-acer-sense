@@ -149,7 +149,7 @@ FocusScope {
                         anchors.margins: Theme.spacingS
                         wrapMode: Text.Wrap
                         text: "sudo sh \"" + root.pluginPath + "/helper/install.sh\""
-                        font.family: "monospace"
+                        font.family: Theme.monoFontFamily
                         font.pixelSize: Theme.fontSizeSmall
                         color: Theme.surfaceText
                     }

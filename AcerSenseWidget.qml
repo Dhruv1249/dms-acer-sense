@@ -20,8 +20,9 @@ PluginComponent {
     property bool gpuRebootRequired: false
 
     property string platformProfile: ""
-    property var pillData: ({})
+    property string fanHwmonPath: ""
     readonly property string effectiveProfile: root.platformProfile || root.telemetry.profile || "balanced"
+    readonly property int gpuTabIndex: root.telemetry.hasRgb ? 3 : 2
 
     readonly property string pillContent: pluginData.pillContent || "cpuTemp"
     readonly property int pollInterval: (pluginData.pollInterval || 4) * 1000
@@ -47,6 +48,19 @@ PluginComponent {
         }
     }
 
+    FileView {
+        id: fanFileView
+        path: root.fanHwmonPath
+    }
+
+    Timer {
+        id: fanReloadTimer
+        interval: root.pollInterval
+        running: !root.popoutVisible && root.pillContent === "fanRpm" && root.fanHwmonPath !== ""
+        repeat: true
+        onTriggered: fanFileView.reload()
+    }
+
     // Active Tab in Popout: 0=Overview, 1=Features, 2=Keyboard RGB, 3=GPU
     property int activeTab: 0
 
@@ -63,17 +77,26 @@ PluginComponent {
         } else {
             profileFileView.reload();
             root.refreshSysfs();
-            if (root.activeTab === 3)
+            if (root.activeTab === root.gpuTabIndex)
                 root.refreshGpu();
         }
     }
     onActiveTabChanged: {
-        if (root.popoutVisible && root.activeTab === 3)
+        if (root.popoutVisible && root.activeTab === root.gpuTabIndex)
             root.refreshGpu();
     }
 
     Component.onCompleted: {
+        if (typeof DgopService !== "undefined" && DgopService.addRef) {
+            DgopService.addRef("acerSensePro");
+        }
         root.refreshSysfs();
+    }
+
+    Component.onDestruction: {
+        if (typeof DgopService !== "undefined" && DgopService.removeRef) {
+            DgopService.removeRef("acerSensePro");
+        }
     }
 
     // RGB Controls State
@@ -171,7 +194,7 @@ PluginComponent {
         }
     }
 
-    popoutWidth: 440
+    popoutWidth: Math.min(Theme.dialogMaxWidth, 440)
 
     component SegSelector: Row {
         id: seg
@@ -184,7 +207,7 @@ PluginComponent {
             model: seg.labels
             Rectangle {
                 width: (seg.width - seg.spacing * (seg.labels.length - 1)) / Math.max(1, seg.labels.length)
-                height: 34
+                height: Theme.buttonHeightS
                 radius: Theme.cornerRadius
                 color: index === seg.current ? Theme.primary : (cellArea.containsMouse ? Theme.surfaceContainerHighest : Theme.surfaceContainerHigh)
 
@@ -272,12 +295,21 @@ PluginComponent {
 
     function pillSecondary() {
         if (root.pillContent === "cpuTemp") {
-            const temp = root.popoutVisible ? root.telemetry.cpuTemp : (root.pillData.cpuTemp ?? root.telemetry.cpuTemp);
-            return (temp != null) ? (temp + "°") : "";
+            if (typeof DgopService !== "undefined" && DgopService.cpuTemperature > 0)
+                return Math.round(DgopService.cpuTemperature) + "°";
+            if (root.telemetry.cpuTemp != null)
+                return root.telemetry.cpuTemp + "°";
+            return "";
         }
         if (root.pillContent === "fanRpm") {
-            const fan = root.popoutVisible ? root.telemetry.fanCpu : (root.pillData.fanCpu ?? root.telemetry.fanCpu);
-            return (fan != null) ? (fan + " rpm") : "";
+            const raw = fanFileView.text().trim();
+            if (raw) {
+                const rpm = parseInt(raw);
+                if (!isNaN(rpm)) return rpm + " rpm";
+            }
+            if (root.telemetry.fanCpu != null)
+                return root.telemetry.fanCpu + " rpm";
+            return "";
         }
         return "";
     }
@@ -458,10 +490,6 @@ PluginComponent {
         if (!gpuProcess.running)
             gpuProcess.running = true;
     }
-    function refreshPill() {
-        if (!pillProcess.running)
-            pillProcess.running = true;
-    }
 
     Process {
         id: sysfsProcess
@@ -475,6 +503,8 @@ PluginComponent {
                 try {
                     const data = JSON.parse(t);
                     root.telemetry = data;
+                    if (data.fanHwmonPath && root.fanHwmonPath !== data.fanHwmonPath)
+                        root.fanHwmonPath = data.fanHwmonPath;
 
                     // Sync initial RGB state from hardware if available
                     root.rgbSyncing = true;
@@ -540,33 +570,6 @@ PluginComponent {
     }
 
     Process {
-        id: pillProcess
-        command: ["sh", root.readerPath, "pill"]
-        running: false
-        stdout: SplitParser {
-            onRead: line => {
-                const t = line.trim();
-                if (!t)
-                    return;
-                try {
-                    root.pillData = JSON.parse(t);
-                } catch (e) {
-                    console.warn("acerSense pill parse:", e);
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: pillTimer
-        interval: root.pollInterval
-        running: !root.popoutVisible && (root.pillContent === "cpuTemp" || root.pillContent === "fanRpm")
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: root.refreshPill()
-    }
-
-    Process {
         id: gpuProcess
         command: ["sh", root.readerPath, "gpu"]
         running: false
@@ -587,7 +590,7 @@ PluginComponent {
     Timer {
         id: gpuTimer
         interval: 5000
-        running: root.popoutVisible && root.activeTab === 3
+        running: root.popoutVisible && root.activeTab === root.gpuTabIndex
         repeat: true
         triggeredOnStart: true
         onTriggered: root.refreshGpu()
@@ -695,7 +698,7 @@ PluginComponent {
 
     verticalBarPill: Component {
         Column {
-            spacing: 1
+            spacing: Theme.spacingXXS
 
             DIcon {
                 name: root.profileIcon(root.effectiveProfile)
@@ -767,7 +770,7 @@ PluginComponent {
                             // Power Source Badge (Material Icons only)
                             Row {
                                 id: powerBadge
-                                spacing: 4
+                                spacing: Theme.spacingXS
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
 
@@ -827,7 +830,7 @@ PluginComponent {
                             // Turbo Active Badge
                             Rectangle {
                                 visible: root.telemetry.hasTurbo && root.telemetry.turboState === 1
-                                height: 22
+                                height: Theme.buttonHeightXS
                                 radius: Theme.cornerRadiusSmall
                                 color: Theme.error
                                 width: turboRow.implicitWidth + 8
@@ -977,7 +980,7 @@ PluginComponent {
                                 anchors.margins: Theme.spacingS
                                 wrapMode: Text.Wrap
                                 text: "sudo sh \"" + root.pluginPath + "/helper/install.sh\""
-                                font.family: "monospace"
+                                font.family: Theme.monoFontFamily
                                 font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.surfaceText
                             }
@@ -1121,21 +1124,21 @@ PluginComponent {
 
                                     Row {
                                         id: cpuInputRow
-                                        spacing: 4
+                                        spacing: Theme.spacingXS
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         DButton {
                                             text: "-5"
-                                            width: 34
-                                            height: 30
+                                            width: Theme.buttonHeightS
+                                            height: Theme.buttonHeightXS
                                             backgroundColor: Theme.surfaceContainerHighest
                                             textColor: Theme.surfaceText
                                             onClicked: root.setCpuFanStep(-5)
                                         }
 
                                         DTextField {
-                                            width: 46
+                                            width: Theme.buttonHeightM + Theme.spacingS
                                             text: String(root.customCpuFan)
                                             onEditingFinished: {
                                                 var n = parseInt(text);
@@ -1158,8 +1161,8 @@ PluginComponent {
 
                                         DButton {
                                             text: "+5"
-                                            width: 34
-                                            height: 30
+                                            width: Theme.buttonHeightS
+                                            height: Theme.buttonHeightXS
                                             backgroundColor: Theme.surfaceContainerHighest
                                             textColor: Theme.surfaceText
                                             onClicked: root.setCpuFanStep(5)
@@ -1215,21 +1218,21 @@ PluginComponent {
 
                                     Row {
                                         id: gpuInputRow
-                                        spacing: 4
+                                        spacing: Theme.spacingXS
                                         anchors.right: parent.right
                                         anchors.verticalCenter: parent.verticalCenter
 
                                         DButton {
                                             text: "-5"
-                                            width: 34
-                                            height: 30
+                                            width: Theme.buttonHeightS
+                                            height: Theme.buttonHeightXS
                                             backgroundColor: Theme.surfaceContainerHighest
                                             textColor: Theme.surfaceText
                                             onClicked: root.setGpuFanStep(-5)
                                         }
 
                                         DTextField {
-                                            width: 46
+                                            width: Theme.buttonHeightM + Theme.spacingS
                                             text: String(root.customGpuFan)
                                             onEditingFinished: {
                                                 var n = parseInt(text);
@@ -1252,8 +1255,8 @@ PluginComponent {
 
                                         DButton {
                                             text: "+5"
-                                            width: 34
-                                            height: 30
+                                            width: Theme.buttonHeightS
+                                            height: Theme.buttonHeightXS
                                             backgroundColor: Theme.surfaceContainerHighest
                                             textColor: Theme.surfaceText
                                             onClicked: root.setGpuFanStep(5)
@@ -1284,13 +1287,13 @@ PluginComponent {
                                 // Quick Speed Presets (sets both fans)
                                 Row {
                                     width: parent.width
-                                    spacing: 6
+                                    spacing: Theme.spacingXS
 
                                     Repeater {
                                         model: [30, 45, 60, 75, 90]
                                         Rectangle {
-                                            width: (parent.width - 24) / 5
-                                            height: 28
+                                            width: (parent.width - Theme.spacingXS * 4) / 5
+                                            height: Theme.buttonHeightXS
                                             radius: Theme.cornerRadius
                                             color: (root.customCpuFan === modelData && root.customGpuFan === modelData) ? Theme.primary : Theme.surfaceContainerHighest
 
@@ -1374,7 +1377,7 @@ PluginComponent {
                                 id: calibCol
                                 anchors.fill: parent
                                 anchors.margins: Theme.spacingS
-                                spacing: 6
+                                spacing: Theme.spacingXS
 
                                 Row {
                                     width: parent.width
@@ -1422,7 +1425,7 @@ PluginComponent {
 
                                 Column {
                                     width: parent.width
-                                    spacing: 4
+                                    spacing: Theme.spacingXS
                                     visible: panel.confirmingCalibration
 
                                     StyledText {
@@ -1439,7 +1442,7 @@ PluginComponent {
                                         DButton {
                                             text: "Confirm Start"
                                             backgroundColor: Theme.warning
-                                            textColor: Theme.onWarning
+                                            textColor: Theme.onPrimary
                                             onClicked: {
                                                 root.setBatteryCalibration(true);
                                                 panel.confirmingCalibration = false;
@@ -1532,7 +1535,7 @@ PluginComponent {
                             }
                             DDropdown {
                                 id: effectModeDrop
-                                width: 160
+                                width: Theme.buttonHeightM * 4
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 currentValue: root.rgbModes[root.rgbMode]
@@ -1556,7 +1559,7 @@ PluginComponent {
                             }
                             DDropdown {
                                 id: effectBrightDrop
-                                width: 120
+                                width: Theme.buttonHeightM * 3
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 currentValue: String(root.rgbBrightness)
@@ -1582,7 +1585,7 @@ PluginComponent {
                             }
                             DDropdown {
                                 id: effectSpeedDrop
-                                width: 120
+                                width: Theme.buttonHeightM * 3
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 currentValue: String(Math.max(1, Math.min(9, root.rgbSpeed)))
@@ -1608,7 +1611,7 @@ PluginComponent {
                             }
                             SegSelector {
                                 id: effectDirSeg
-                                width: 180
+                                width: Theme.buttonHeightM * 4.5
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 labels: ["Right to Left", "Left to Right"]
@@ -1622,7 +1625,7 @@ PluginComponent {
                         // Color picker section: visible for Static, Breathing, Shifting, Zoom, Meteor, Twinkling
                         Column {
                             width: parent.width
-                            spacing: 6
+                            spacing: Theme.spacingXS
                             visible: root.rgbMode !== 2 && root.rgbMode !== 3
 
                             Item {
@@ -1645,8 +1648,8 @@ PluginComponent {
 
                                     Rectangle {
                                         id: colorCircle
-                                        width: 24
-                                        height: 24
+                                        width: Theme.iconSizeMedium
+                                        height: Theme.iconSizeMedium
                                         radius: width / 2
                                         anchors.verticalCenter: parent.verticalCenter
                                         color: "#" + root.rgbColorHex
@@ -1655,7 +1658,7 @@ PluginComponent {
 
                                         DIcon {
                                             name: "colorize"
-                                            size: 14
+                                            size: Theme.iconSizeSmall
                                             anchors.centerIn: parent
                                             color: root.zoneTextColor(root.rgbColorHex)
                                             opacity: colorCircleMouseArea.containsMouse ? 0.9 : 0.0
@@ -1678,7 +1681,7 @@ PluginComponent {
 
                                     DTextField {
                                         id: hexField
-                                        width: 80
+                                        width: Theme.buttonHeightM * 2
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: root.rgbColorHex.toUpperCase()
                                         onEditingFinished: {
@@ -1731,12 +1734,12 @@ PluginComponent {
 
                             // Color preset swatches
                             Row {
-                                spacing: 4
+                                spacing: Theme.spacingXS
                                 Repeater {
                                     model: root.presetColors
                                     Rectangle {
-                                        width: (parent.parent.width - 32) / 9
-                                        height: 24
+                                        width: (parent.parent.width - Theme.spacingXS * 8) / 9
+                                        height: Theme.iconSizeMedium
                                         radius: Theme.cornerRadiusSmall
                                         color: "#" + modelData.hex
                                         border.color: root.rgbColorHex === modelData.hex ? Theme.primary : Theme.outlineVariant
@@ -1769,7 +1772,7 @@ PluginComponent {
                         // 4 Zone Visual Representation
                         Row {
                             width: parent.width
-                            spacing: 6
+                            spacing: Theme.spacingXS
 
                             Repeater {
                                 model: [
@@ -1780,8 +1783,8 @@ PluginComponent {
                                 ]
 
                                 Rectangle {
-                                    width: (parent.width - 18) / 4
-                                    height: 48
+                                    width: (parent.width - Theme.spacingXS * 3) / 4
+                                    height: Theme.minimumTouchTargetSize
                                     radius: Theme.cornerRadius
                                     color: "#" + modelData.hex
                                     border.color: (root.activeZoneIndex === index + 1 || root.activeZoneIndex === 0) ? Theme.primary : Theme.outlineVariant
@@ -1789,8 +1792,8 @@ PluginComponent {
 
                                     Rectangle {
                                         anchors.centerIn: parent
-                                        width: parent.width - 8
-                                        height: 38
+                                        width: parent.width - Theme.spacingS
+                                        height: parent.height - Theme.spacingS
                                         radius: Theme.cornerRadiusSmall
                                         color: root.zoneTextBg(modelData.hex)
 
@@ -1825,7 +1828,7 @@ PluginComponent {
                         // Custom color picker row for active zone
                         Item {
                             width: parent.width
-                            height: Math.max(34, zoneHexField.height)
+                            height: Math.max(Theme.buttonHeightS, zoneHexField.height)
 
                             StyledText {
                                 text: (root.activeZoneIndex === 0 ? "Target: All Zones" : ("Target: Zone " + root.activeZoneIndex)) + " (#" + root.currentActiveZoneHex().toUpperCase() + ")"
@@ -1843,8 +1846,8 @@ PluginComponent {
 
                                 Rectangle {
                                     id: zoneColorCircle
-                                    width: 24
-                                    height: 24
+                                    width: Theme.iconSizeMedium
+                                    height: Theme.iconSizeMedium
                                     radius: width / 2
                                     anchors.verticalCenter: parent.verticalCenter
                                     color: "#" + root.currentActiveZoneHex()
@@ -1853,7 +1856,7 @@ PluginComponent {
 
                                     DIcon {
                                         name: "colorize"
-                                        size: 14
+                                        size: Theme.iconSizeSmall
                                         anchors.centerIn: parent
                                         color: root.zoneTextColor(root.currentActiveZoneHex())
                                         opacity: zoneColorCircleMouseArea.containsMouse ? 0.9 : 0.0
@@ -1876,7 +1879,7 @@ PluginComponent {
 
                                 DTextField {
                                     id: zoneHexField
-                                    width: 80
+                                    width: Theme.buttonHeightM * 2
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: root.currentActiveZoneHex().toUpperCase()
                                     onEditingFinished: {
@@ -1931,12 +1934,12 @@ PluginComponent {
 
                         // Color swatches for zones
                         Row {
-                            spacing: 4
+                            spacing: Theme.spacingXS
                             Repeater {
                                 model: root.presetColors
                                 Rectangle {
-                                    width: (parent.parent.width - 32) / 9
-                                    height: 24
+                                    width: (parent.parent.width - Theme.spacingXS * 8) / 9
+                                    height: Theme.iconSizeMedium
                                     radius: Theme.cornerRadiusSmall
                                     color: "#" + modelData.hex
                                     border.color: root.currentActiveZoneHex() === modelData.hex ? Theme.primary : Theme.outlineVariant
@@ -2007,7 +2010,7 @@ PluginComponent {
                             }
                             DDropdown {
                                 id: zoneBrightDrop
-                                width: 120
+                                width: Theme.buttonHeightM * 3
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
                                 currentValue: String(root.zoneBrightness)
@@ -2033,7 +2036,7 @@ PluginComponent {
                             id: enekCol
                             anchors.fill: parent
                             anchors.margins: Theme.spacingS
-                            spacing: 4
+                            spacing: Theme.spacingXS
 
                             Row {
                                 spacing: Theme.spacingXS
@@ -2065,7 +2068,7 @@ PluginComponent {
                 Column {
                     width: parent.width
                     spacing: Theme.spacingM
-                    visible: root.activeTab === (root.telemetry.hasRgb ? 3 : 2)
+                    visible: root.activeTab === root.gpuTabIndex
 
                     // GPU Telemetry Card
                     Rectangle {
@@ -2105,7 +2108,7 @@ PluginComponent {
                                 spacing: Theme.spacingM
 
                                 Column {
-                                    spacing: 2
+                                    spacing: Theme.spacingXXS
                                     StyledText {
                                         text: "Temperature"
                                         font.pixelSize: Theme.fontSizeSmall
@@ -2120,7 +2123,7 @@ PluginComponent {
                                 }
 
                                 Column {
-                                    spacing: 2
+                                    spacing: Theme.spacingXXS
                                     StyledText {
                                         text: "Utilization"
                                         font.pixelSize: Theme.fontSizeSmall
@@ -2135,7 +2138,7 @@ PluginComponent {
                                 }
 
                                 Column {
-                                    spacing: 2
+                                    spacing: Theme.spacingXXS
                                     StyledText {
                                         text: "Power Draw"
                                         font.pixelSize: Theme.fontSizeSmall
@@ -2197,7 +2200,7 @@ PluginComponent {
                             }
 
                             Rectangle {
-                                height: 24
+                                height: Theme.buttonHeightXS
                                 radius: Theme.cornerRadiusSmall
                                 color: Theme.primaryContainer
                                 implicitWidth: activeLabel.implicitWidth + Theme.spacingM * 2
@@ -2431,7 +2434,7 @@ PluginComponent {
                                     anchors.leftMargin: Theme.spacingS
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: root.gpuData.envyInstallCmd || "sudo pip install envycontrol"
-                                    font.family: "monospace"
+                                    font.family: Theme.monoFontFamily
                                     font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.surfaceText
                                 }
