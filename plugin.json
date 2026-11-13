@@ -1,7 +1,7 @@
 {
     "id": "acerSensePro",
     "name": "Acer Sense Pro",
-    "description": "Control panel for Acer Nitro/Predator laptops in Dux Shell: power profiles, custom fan control, 4-zone RGB keyboard lighting, battery calibration & limiter, LCD overdrive, boot sound, and GPU mode — powered by linuwu-sense.",
+    "description": "Expanded control center for Acer Nitro/Predator laptops (based on raphamzn/dms-acer-sense): power profiles, custom fans, 4-zone RGB, battery limiter, calibration, LCD overdrive, and GPU mode.",
     "version": "2.0.0",
     "author": "Dhruv1249",
     "type": "widget",
