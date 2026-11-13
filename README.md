@@ -6,6 +6,14 @@ A comprehensive laptop control center for **Acer Nitro / Predator** laptops in y
 
 ---
 
+<p align="center">
+  <img src="screenshot-overview.png" alt="Acer Sense Overview" width="31%" />
+  <img src="screenshot-features.png" alt="Acer Sense Features" width="31%" />
+  <img src="screenshot-keyboard.png" alt="Acer Sense Keyboard RGB" width="31%" />
+</p>
+
+---
+
 ## ✨ Features
 
 - **Power Profiles** — Switch between Low-Power / Quiet / Balanced / Performance / Turbo (`platform_profile` synchronized with `power-profiles-daemon`).
