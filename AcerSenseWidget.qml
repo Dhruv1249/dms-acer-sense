@@ -24,7 +24,7 @@ PluginComponent {
     readonly property bool hasNs: root.telemetry.hasNs !== false
     readonly property bool hasHelper: root.telemetry.hasHelper === true
 
-    readonly property string pluginPath: PluginService.getPluginPath(root.pluginId) || (PluginService.pluginDirectory + "/acerSense")
+    readonly property string pluginPath: PluginService.getPluginPath(root.pluginId) || (PluginService.pluginDirectory + "/acerSensePro")
     readonly property string readerPath: root.pluginPath + "/acer-read"
 
     readonly property int pillFontSize: Theme.barTextSize(root.barThickness, root.barConfig?.fontScale, root.barConfig?.maximizeWidgetText)

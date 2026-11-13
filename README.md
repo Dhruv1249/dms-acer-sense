@@ -1,8 +1,8 @@
-# Acer Sense — Dux Shell Plugin (Fork)
+# Acer Sense Pro — Dux Shell Plugin
 
 A comprehensive laptop control center for **Acer Nitro / Predator** laptops in your [Dux Shell](https://duxlabs.dev) (formerly DankMaterialShell / DMS) bar. A customizable bar pill displays your current power profile and live metrics; clicking it opens a feature-packed popout control center.
 
-> **Fork Notice:** This repository is an expanded fork of [raphamzn/dms-acer-sense](https://github.com/raphamzn/dms-acer-sense) maintained by **[Dhruv1249](https://github.com/Dhruv1249/dms-acer-sense)**. It brings complete feature parity with the [Linuwu-Sense](https://github.com/0x7375646F/Linuwu-Sense) kernel module, including interactive 4-zone RGB keyboard control, custom fan speeds, battery calibration, LCD overdrive, boot animation sound toggles, in-extension helper setup, and AMD Ryzen CPU temperature support.
+> **Notice:** Acer Sense Pro is an expanded, feature-complete edition for Acer gaming laptops maintained by **[Dhruv1249](https://github.com/Dhruv1249/dms-acer-sense)**. It brings complete feature parity with the [Linuwu-Sense](https://github.com/0x7375646F/Linuwu-Sense) kernel module, including interactive 4-zone RGB keyboard control, custom fan speeds with presets, battery calibration, LCD overdrive, boot animation sound toggles, in-extension helper setup, hardware MUX detection, and AMD Ryzen CPU temperature support.
 
 ---
 
@@ -99,29 +99,29 @@ Clone into your Dux Shell plugins directory:
 ```bash
 # For modern Dux Shell:
 git clone https://github.com/Dhruv1249/dms-acer-sense.git \
-  ~/.config/dms/plugins/acerSense
+  ~/.config/dms/plugins/acerSensePro
 
 # If your installation uses legacy DankMaterialShell paths:
-# git clone https://github.com/Dhruv1249/dms-acer-sense.git ~/.config/DankMaterialShell/plugins/acerSense
+# git clone https://github.com/Dhruv1249/dms-acer-sense.git ~/.config/DankMaterialShell/plugins/acerSensePro
 
 dms restart
 ```
 
 ### 2. Privileged Helper Setup (Required for Controls)
 
-Writing to `platform_profile`, fan speeds, battery limiter, and RGB sysfs files requires elevated privileges. Acer Sense includes an auditable helper script (`helper/acer-ctl`) and a single `NOPASSWD` sudoers entry scoped strictly to that binary.
+Writing to `platform_profile`, fan speeds, battery limiter, and RGB sysfs files requires elevated privileges. Acer Sense Pro includes an auditable helper script (`helper/acer-ctl`) and a single `NOPASSWD` sudoers entry scoped strictly to that binary.
 
 You can set this up in **two easy ways**:
 
 #### Option A: Inside the Extension (Recommended)
-1. Open the Acer Sense popout or settings in Dux Shell.
+1. Open the Acer Sense Pro popout or settings in Dux Shell.
 2. Click the **"Authenticate with Password"** button in the warning banner.
 3. Enter your password in the native Polkit prompt — setup completes automatically!
 
 #### Option B: Terminal Command
 Run the installation script once:
 ```bash
-sudo sh ~/.config/dms/plugins/acerSense/helper/install.sh
+sudo sh ~/.config/dms/plugins/acerSensePro/helper/install.sh
 ```
 
 *(You can also click the "Copy Terminal Command" button in the popout to copy this exact command to your clipboard).*
@@ -129,8 +129,8 @@ sudo sh ~/.config/dms/plugins/acerSense/helper/install.sh
 ### 3. Enable in Dux Shell
 
 1. Open Dux Shell Settings: `Mod + ,`
-2. Go to **Plugins** → **Scan for Plugins** → Enable **Acer Sense**.
-3. Add `acerSense` to your bar layout (**Appearance** → **DankBar Layout**).
+2. Go to **Plugins** → **Scan for Plugins** → Enable **Acer Sense Pro**.
+3. Add `acerSensePro` to your bar layout (**Appearance** → **DankBar Layout**).
 
 ---
 

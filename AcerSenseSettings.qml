@@ -14,17 +14,17 @@ FocusScope {
     property int pollInterval: 4
     property bool helperInstalled: false
 
-    readonly property string pluginPath: PluginService.getPluginPath("acerSense") || (PluginService.pluginDirectory + "/acerSense")
+    readonly property string pluginPath: PluginService.getPluginPath("acerSensePro") || (PluginService.pluginDirectory + "/acerSensePro")
 
     implicitHeight: col.implicitHeight + Theme.spacingM * 2
     height: implicitHeight
 
     function load(key, def) {
-        return pluginService ? pluginService.loadPluginData("acerSense", key, def) : def;
+        return pluginService ? pluginService.loadPluginData("acerSensePro", key, def) : def;
     }
     function save(key, val) {
         if (pluginService)
-            pluginService.savePluginData("acerSense", key, val);
+            pluginService.savePluginData("acerSensePro", key, val);
     }
 
     function checkHelper() {
