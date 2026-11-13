@@ -19,6 +19,10 @@ PluginComponent {
     property string gpuPendingRebootMode: ""
     property bool gpuRebootRequired: false
 
+    property string platformProfile: ""
+    property var pillData: ({})
+    readonly property string effectiveProfile: root.platformProfile || root.telemetry.profile || "balanced"
+
     readonly property string pillContent: pluginData.pillContent || "cpuTemp"
     readonly property int pollInterval: (pluginData.pollInterval || 4) * 1000
     readonly property bool hasNs: root.telemetry.hasNs !== false
@@ -33,6 +37,16 @@ PluginComponent {
     readonly property var profileValues: root.parseProfileChoices(root.telemetry.profileChoices)
     readonly property var profileLabels: root.profileValues.map(p => root.profileLabel(p))
 
+    FileView {
+        id: profileFileView
+        path: "/sys/firmware/acpi/platform_profile"
+        onLoaded: {
+            const p = profileFileView.text().trim();
+            if (p)
+                root.platformProfile = p;
+        }
+    }
+
     // Active Tab in Popout: 0=Overview, 1=Features, 2=Keyboard RGB, 3=GPU
     property int activeTab: 0
 
@@ -46,7 +60,20 @@ PluginComponent {
     onPopoutVisibleChanged: {
         if (!popoutVisible) {
             root.fanCustomInitialized = false;
+        } else {
+            profileFileView.reload();
+            root.refreshSysfs();
+            if (root.activeTab === 3)
+                root.refreshGpu();
         }
+    }
+    onActiveTabChanged: {
+        if (root.popoutVisible && root.activeTab === 3)
+            root.refreshGpu();
+    }
+
+    Component.onCompleted: {
+        root.refreshSysfs();
     }
 
     // RGB Controls State
@@ -169,7 +196,7 @@ PluginComponent {
                     elide: Text.ElideRight
                     text: modelData
                     color: index === seg.current ? Theme.onPrimary : Theme.surfaceText
-                    font.pixelSize: seg.labels.length >= 5 ? 11 : Theme.fontSizeSmall
+                    font.pixelSize: seg.labels.length >= 5 ? Theme.fontSizeXSmall : Theme.fontSizeSmall
                 }
 
                 MouseArea {
@@ -244,10 +271,14 @@ PluginComponent {
     }
 
     function pillSecondary() {
-        if (root.pillContent === "cpuTemp")
-            return (root.telemetry.cpuTemp != null) ? (root.telemetry.cpuTemp + "°") : "";
-        if (root.pillContent === "fanRpm")
-            return (root.telemetry.fanCpu != null) ? (root.telemetry.fanCpu + " rpm") : "";
+        if (root.pillContent === "cpuTemp") {
+            const temp = root.popoutVisible ? root.telemetry.cpuTemp : (root.pillData.cpuTemp ?? root.telemetry.cpuTemp);
+            return (temp != null) ? (temp + "°") : "";
+        }
+        if (root.pillContent === "fanRpm") {
+            const fan = root.popoutVisible ? root.telemetry.fanCpu : (root.pillData.fanCpu ?? root.telemetry.fanCpu);
+            return (fan != null) ? (fan + " rpm") : "";
+        }
         return "";
     }
 
@@ -274,14 +305,14 @@ PluginComponent {
 
     function copyInstallCommand() {
         const cmd = "sudo sh \"" + root.pluginPath + "/helper/install.sh\"";
-        clipboardProcess.command = ["dms", "clipboard", "copy", cmd];
+        clipboardProcess.command = ["dms", "cl", "copy", cmd];
         clipboardProcess.running = true;
         ToastService.showInfo("Install command copied to clipboard!");
     }
 
     function copyEnvyInstallCommand() {
         const cmd = root.gpuData.envyInstallCmd || "sudo pip install envycontrol";
-        clipboardProcess.command = ["dms", "clipboard", "copy", cmd];
+        clipboardProcess.command = ["dms", "cl", "copy", cmd];
         clipboardProcess.running = true;
         ToastService.showInfo("Install command copied to clipboard!");
     }
@@ -303,6 +334,7 @@ PluginComponent {
     }
 
     function setProfile(p) {
+        root.platformProfile = p;
         runCtl(["profile", p], "Profile: " + p);
         const ppd = root.ppdForProfile(p);
         if (ppd && !ppdProcess.running) {
@@ -426,6 +458,10 @@ PluginComponent {
         if (!gpuProcess.running)
             gpuProcess.running = true;
     }
+    function refreshPill() {
+        if (!pillProcess.running)
+            pillProcess.running = true;
+    }
 
     Process {
         id: sysfsProcess
@@ -495,11 +531,39 @@ PluginComponent {
     }
 
     Timer {
+        id: sysfsTimer
         interval: root.pollInterval
-        running: true
+        running: root.popoutVisible
         repeat: true
         triggeredOnStart: true
         onTriggered: root.refreshSysfs()
+    }
+
+    Process {
+        id: pillProcess
+        command: ["sh", root.readerPath, "pill"]
+        running: false
+        stdout: SplitParser {
+            onRead: line => {
+                const t = line.trim();
+                if (!t)
+                    return;
+                try {
+                    root.pillData = JSON.parse(t);
+                } catch (e) {
+                    console.warn("acerSense pill parse:", e);
+                }
+            }
+        }
+    }
+
+    Timer {
+        id: pillTimer
+        interval: root.pollInterval
+        running: !root.popoutVisible && (root.pillContent === "cpuTemp" || root.pillContent === "fanRpm")
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: root.refreshPill()
     }
 
     Process {
@@ -521,8 +585,9 @@ PluginComponent {
     }
 
     Timer {
-        interval: 2000
-        running: root.popoutVisible
+        id: gpuTimer
+        interval: 5000
+        running: root.popoutVisible && root.activeTab === 3
         repeat: true
         triggeredOnStart: true
         onTriggered: root.refreshGpu()
@@ -585,9 +650,26 @@ PluginComponent {
     }
 
     Process {
-        id: rebootProcess
-        command: ["systemctl", "reboot"]
+        id: screenPickerProcess
+        command: ["dms", "color", "pick", "--hex", "-l", "--raw"]
         running: false
+        property int targetZone: -1
+        stdout: SplitParser {
+            onRead: line => {
+                const t = line.trim();
+                if (!t)
+                    return;
+                const clean = t.replace(/[^0-9a-fA-F]/g, "").slice(0, 6).toLowerCase();
+                if (clean.length === 6) {
+                    if (screenPickerProcess.targetZone === -1) {
+                        root.rgbColorHex = clean;
+                    } else {
+                        root.setZoneColor(clean);
+                    }
+                    ToastService.showInfo("Eyedropper: #" + clean.toUpperCase());
+                }
+            }
+        }
     }
 
     horizontalBarPill: Component {
@@ -595,7 +677,7 @@ PluginComponent {
             spacing: Theme.spacingXS
 
             DIcon {
-                name: root.profileIcon(root.telemetry.profile)
+                name: root.profileIcon(root.effectiveProfile)
                 color: Theme.primary
                 size: root.iconSize
                 anchors.verticalCenter: parent.verticalCenter
@@ -616,7 +698,7 @@ PluginComponent {
             spacing: 1
 
             DIcon {
-                name: root.profileIcon(root.telemetry.profile)
+                name: root.profileIcon(root.effectiveProfile)
                 color: Theme.primary
                 size: root.iconSize
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -690,14 +772,14 @@ PluginComponent {
                                 anchors.verticalCenter: parent.verticalCenter
 
                                 DIcon {
-                                    name: root.telemetry.powerSource === "AC" ? "power" : (root.telemetry.battStatus === "Charging" ? "battery_charging_full" : "battery_std")
+                                    name: BatteryService.isPluggedIn ? "power" : (BatteryService.isCharging ? "battery_charging_full" : "battery_std")
                                     size: Theme.iconSizeSmall
-                                    color: root.telemetry.powerSource === "AC" ? Theme.primary : Theme.secondary
+                                    color: BatteryService.isPluggedIn ? Theme.primary : Theme.secondary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
 
                                 StyledText {
-                                    text: root.telemetry.powerSource === "AC" ? "AC Power" : ((root.telemetry.battPct != null ? root.telemetry.battPct + "%" : "Battery"))
+                                    text: BatteryService.isPluggedIn ? "AC Power" : (Math.round(BatteryService.batteryLevel) + "%")
                                     color: Theme.surfaceVariantText
                                     font.pixelSize: Theme.fontSizeSmall
                                     anchors.verticalCenter: parent.verticalCenter
@@ -746,7 +828,7 @@ PluginComponent {
                             Rectangle {
                                 visible: root.telemetry.hasTurbo && root.telemetry.turboState === 1
                                 height: 22
-                                radius: 4
+                                radius: Theme.cornerRadiusSmall
                                 color: Theme.error
                                 width: turboRow.implicitWidth + 8
                                 anchors.verticalCenter: parent.verticalCenter
@@ -754,18 +836,18 @@ PluginComponent {
                                 Row {
                                     id: turboRow
                                     anchors.centerIn: parent
-                                    spacing: 2
+                                    spacing: Theme.spacingXS
                                     DIcon {
                                         name: "rocket_launch"
-                                        size: 14
-                                        color: "#FFFFFF"
+                                        size: Theme.iconSizeSmall
+                                        color: Theme.onError
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                     StyledText {
                                         text: "TURBO"
-                                        font.pixelSize: 11
+                                        font.pixelSize: Theme.fontSizeXSmall
                                         font.weight: Font.Bold
-                                        color: "#FFFFFF"
+                                        color: Theme.onError
                                         anchors.verticalCenter: parent.verticalCenter
                                     }
                                 }
@@ -896,7 +978,7 @@ PluginComponent {
                                 wrapMode: Text.Wrap
                                 text: "sudo sh \"" + root.pluginPath + "/helper/install.sh\""
                                 font.family: "monospace"
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.surfaceText
                             }
                         }
@@ -959,7 +1041,7 @@ PluginComponent {
                         SegSelector {
                             width: parent.width
                             labels: root.profileLabels
-                            current: root.profileValues.indexOf(root.telemetry.profile)
+                            current: root.profileValues.indexOf(root.effectiveProfile)
                             onPicked: i => root.setProfile(root.profileValues[i])
                         }
                     }
@@ -1085,7 +1167,7 @@ PluginComponent {
                                     }
                                 }
 
-                                DankSlider {
+                                DSlider {
                                     id: cpuSlider
                                     width: parent.width
                                     minimum: 20
@@ -1179,7 +1261,7 @@ PluginComponent {
                                     }
                                 }
 
-                                DankSlider {
+                                DSlider {
                                     id: gpuSlider
                                     width: parent.width
                                     minimum: 20
@@ -1215,7 +1297,7 @@ PluginComponent {
                                             StyledText {
                                                 anchors.centerIn: parent
                                                 text: modelData + "%"
-                                                font.pixelSize: 11
+                                                font.pixelSize: Theme.fontSizeXSmall
                                                 color: (root.customCpuFan === modelData && root.customGpuFan === modelData) ? Theme.onPrimary : Theme.surfaceText
                                             }
 
@@ -1256,13 +1338,13 @@ PluginComponent {
                         StyledText {
                             width: parent.width
                             elide: Text.ElideRight
-                            text: "Battery — " + (root.telemetry.battPct != null ? root.telemetry.battPct + "%" : "—") + (root.telemetry.battStatus ? " · " + root.telemetry.battStatus : "") + (root.telemetry.battCycles != null ? " · " + root.telemetry.battCycles + " cycles" : "")
+                            text: "Battery — " + Math.round(BatteryService.batteryLevel) + "%" + (BatteryService.isCharging ? " · Charging" : (BatteryService.isPluggedIn ? " · Plugged In" : " · Discharging"))
                             font.pixelSize: Theme.fontSizeMedium
                             font.weight: Font.Medium
                             color: Theme.surfaceText
                         }
 
-                        DankToggle {
+                        DToggle {
                             width: parent.width
                             visible: root.hasNs
                             text: "Limit charge to 80% (Preserve battery lifespan)"
@@ -1270,7 +1352,7 @@ PluginComponent {
                             onToggled: on => root.setBatteryLimit(on)
                         }
 
-                        DankDropdown {
+                        DDropdown {
                             width: parent.width
                             visible: root.hasNs
                             text: "USB Power-Off Charging limit"
@@ -1357,7 +1439,7 @@ PluginComponent {
                                         DButton {
                                             text: "Confirm Start"
                                             backgroundColor: Theme.warning
-                                            textColor: "#000000"
+                                            textColor: Theme.onWarning
                                             onClicked: {
                                                 root.setBatteryCalibration(true);
                                                 panel.confirmingCalibration = false;
@@ -1388,21 +1470,21 @@ PluginComponent {
                             color: Theme.surfaceText
                         }
 
-                        DankToggle {
+                        DToggle {
                             width: parent.width
                             text: "LCD Overdrive (Minimize latency & ghosting)"
                             checked: root.telemetry.lcdOverride === 1
                             onToggled: on => root.setLcdOverride(on)
                         }
 
-                        DankToggle {
+                        DToggle {
                             width: parent.width
                             text: "Boot Animation Sound / Chime"
                             checked: root.telemetry.bootAnimationSound === 1
                             onToggled: on => root.setBootSound(on)
                         }
 
-                        DankToggle {
+                        DToggle {
                             width: parent.width
                             text: "Keyboard Backlight Timeout (30s idle)"
                             checked: root.telemetry.backlightTimeout === 1
@@ -1448,7 +1530,7 @@ PluginComponent {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            DankDropdown {
+                            DDropdown {
                                 id: effectModeDrop
                                 width: 160
                                 anchors.right: parent.right
@@ -1472,7 +1554,7 @@ PluginComponent {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            DankDropdown {
+                            DDropdown {
                                 id: effectBrightDrop
                                 width: 120
                                 anchors.right: parent.right
@@ -1498,7 +1580,7 @@ PluginComponent {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            DankDropdown {
+                            DDropdown {
                                 id: effectSpeedDrop
                                 width: 120
                                 anchors.right: parent.right
@@ -1545,7 +1627,7 @@ PluginComponent {
 
                             Item {
                                 width: parent.width
-                                height: 32
+                                height: Math.max(34, hexField.height)
 
                                 StyledText {
                                     text: "Color (#" + root.rgbColorHex.toUpperCase() + ")"
@@ -1556,21 +1638,48 @@ PluginComponent {
                                 }
 
                                 Row {
+                                    id: colorPickerRow
                                     anchors.right: parent.right
                                     anchors.verticalCenter: parent.verticalCenter
-                                    spacing: 6
+                                    spacing: Theme.spacingS
 
                                     Rectangle {
-                                        width: 26
-                                        height: 26
-                                        radius: 13
+                                        id: colorCircle
+                                        width: 24
+                                        height: 24
+                                        radius: width / 2
+                                        anchors.verticalCenter: parent.verticalCenter
                                         color: "#" + root.rgbColorHex
-                                        border.color: Theme.surfaceVariantText
+                                        border.color: Theme.outlineVariant
                                         border.width: 1
+
+                                        DIcon {
+                                            name: "colorize"
+                                            size: 14
+                                            anchors.centerIn: parent
+                                            color: root.zoneTextColor(root.rgbColorHex)
+                                            opacity: colorCircleMouseArea.containsMouse ? 0.9 : 0.0
+                                            Behavior on opacity { NumberAnimation { duration: 150 } }
+                                        }
+
+                                        MouseArea {
+                                            id: colorCircleMouseArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: {
+                                                if (!screenPickerProcess.running) {
+                                                    screenPickerProcess.targetZone = -1;
+                                                    screenPickerProcess.running = true;
+                                                }
+                                            }
+                                        }
                                     }
 
                                     DTextField {
+                                        id: hexField
                                         width: 80
+                                        anchors.verticalCenter: parent.verticalCenter
                                         text: root.rgbColorHex.toUpperCase()
                                         onEditingFinished: {
                                             const clean = text.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
@@ -1581,6 +1690,13 @@ PluginComponent {
                                             }
                                         }
                                     }
+
+                                    Connections {
+                                        target: root
+                                        function onRgbColorHexChanged() {
+                                            hexField.text = root.rgbColorHex.toUpperCase();
+                                        }
+                                    }
                                 }
                             }
 
@@ -1588,7 +1704,7 @@ PluginComponent {
                             Rectangle {
                                 width: parent.width
                                 height: 16
-                                radius: 8
+                                radius: Theme.cornerRadiusSmall
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
                                     GradientStop { position: 0.00; color: "#ff0000" }
@@ -1621,9 +1737,9 @@ PluginComponent {
                                     Rectangle {
                                         width: (parent.parent.width - 32) / 9
                                         height: 24
-                                        radius: 4
+                                        radius: Theme.cornerRadiusSmall
                                         color: "#" + modelData.hex
-                                        border.color: root.rgbColorHex === modelData.hex ? Theme.primary : "#44FFFFFF"
+                                        border.color: root.rgbColorHex === modelData.hex ? Theme.primary : Theme.outlineVariant
                                         border.width: root.rgbColorHex === modelData.hex ? 2 : 1
                                         MouseArea {
                                             anchors.fill: parent
@@ -1668,28 +1784,28 @@ PluginComponent {
                                     height: 48
                                     radius: Theme.cornerRadius
                                     color: "#" + modelData.hex
-                                    border.color: (root.activeZoneIndex === index + 1 || root.activeZoneIndex === 0) ? Theme.primary : "#44FFFFFF"
+                                    border.color: (root.activeZoneIndex === index + 1 || root.activeZoneIndex === 0) ? Theme.primary : Theme.outlineVariant
                                     border.width: (root.activeZoneIndex === index + 1) ? 3 : 1
 
                                     Rectangle {
                                         anchors.centerIn: parent
                                         width: parent.width - 8
                                         height: 38
-                                        radius: 6
+                                        radius: Theme.cornerRadiusSmall
                                         color: root.zoneTextBg(modelData.hex)
 
                                         Column {
                                             anchors.centerIn: parent
                                             StyledText {
                                                 text: modelData.label
-                                                font.pixelSize: 11
+                                                font.pixelSize: Theme.fontSizeSmall
                                                 font.weight: Font.Bold
                                                 color: root.zoneTextColor(modelData.hex)
                                                 anchors.horizontalCenter: parent.horizontalCenter
                                             }
                                             StyledText {
                                                 text: "#" + modelData.hex.toUpperCase()
-                                                font.pixelSize: 9
+                                                font.pixelSize: Theme.fontSizeXSmall
                                                 font.weight: Font.Medium
                                                 color: root.zoneTextColor(modelData.hex)
                                                 anchors.horizontalCenter: parent.horizontalCenter
@@ -1709,7 +1825,7 @@ PluginComponent {
                         // Custom color picker row for active zone
                         Item {
                             width: parent.width
-                            height: 32
+                            height: Math.max(34, zoneHexField.height)
 
                             StyledText {
                                 text: (root.activeZoneIndex === 0 ? "Target: All Zones" : ("Target: Zone " + root.activeZoneIndex)) + " (#" + root.currentActiveZoneHex().toUpperCase() + ")"
@@ -1720,21 +1836,48 @@ PluginComponent {
                             }
 
                             Row {
+                                id: zoneColorPickerRow
                                 anchors.right: parent.right
                                 anchors.verticalCenter: parent.verticalCenter
-                                spacing: 6
+                                spacing: Theme.spacingS
 
                                 Rectangle {
-                                    width: 26
-                                    height: 26
-                                    radius: 13
+                                    id: zoneColorCircle
+                                    width: 24
+                                    height: 24
+                                    radius: width / 2
+                                    anchors.verticalCenter: parent.verticalCenter
                                     color: "#" + root.currentActiveZoneHex()
-                                    border.color: Theme.surfaceVariantText
+                                    border.color: Theme.outlineVariant
                                     border.width: 1
+
+                                    DIcon {
+                                        name: "colorize"
+                                        size: 14
+                                        anchors.centerIn: parent
+                                        color: root.zoneTextColor(root.currentActiveZoneHex())
+                                        opacity: zoneColorCircleMouseArea.containsMouse ? 0.9 : 0.0
+                                        Behavior on opacity { NumberAnimation { duration: 150 } }
+                                    }
+
+                                    MouseArea {
+                                        id: zoneColorCircleMouseArea
+                                        anchors.fill: parent
+                                        hoverEnabled: true
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: {
+                                            if (!screenPickerProcess.running) {
+                                                screenPickerProcess.targetZone = root.activeZoneIndex;
+                                                screenPickerProcess.running = true;
+                                            }
+                                        }
+                                    }
                                 }
 
                                 DTextField {
+                                    id: zoneHexField
                                     width: 80
+                                    anchors.verticalCenter: parent.verticalCenter
                                     text: root.currentActiveZoneHex().toUpperCase()
                                     onEditingFinished: {
                                         const clean = text.replace(/[^0-9a-fA-F]/g, "").slice(0, 6);
@@ -1745,6 +1888,15 @@ PluginComponent {
                                         }
                                     }
                                 }
+
+                                Connections {
+                                    target: root
+                                    function onZone1ColorChanged() { zoneHexField.text = root.currentActiveZoneHex().toUpperCase(); }
+                                    function onZone2ColorChanged() { zoneHexField.text = root.currentActiveZoneHex().toUpperCase(); }
+                                    function onZone3ColorChanged() { zoneHexField.text = root.currentActiveZoneHex().toUpperCase(); }
+                                    function onZone4ColorChanged() { zoneHexField.text = root.currentActiveZoneHex().toUpperCase(); }
+                                    function onActiveZoneIndexChanged() { zoneHexField.text = root.currentActiveZoneHex().toUpperCase(); }
+                                }
                             }
                         }
 
@@ -1752,7 +1904,7 @@ PluginComponent {
                         Rectangle {
                             width: parent.width
                             height: 16
-                            radius: 8
+                            radius: Theme.cornerRadiusSmall
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
                                 GradientStop { position: 0.00; color: "#ff0000" }
@@ -1785,9 +1937,9 @@ PluginComponent {
                                 Rectangle {
                                     width: (parent.parent.width - 32) / 9
                                     height: 24
-                                    radius: 4
+                                    radius: Theme.cornerRadiusSmall
                                     color: "#" + modelData.hex
-                                    border.color: root.currentActiveZoneHex() === modelData.hex ? Theme.primary : "#44FFFFFF"
+                                    border.color: root.currentActiveZoneHex() === modelData.hex ? Theme.primary : Theme.outlineVariant
                                     border.width: root.currentActiveZoneHex() === modelData.hex ? 2 : 1
 
                                     MouseArea {
@@ -1853,7 +2005,7 @@ PluginComponent {
                                 anchors.left: parent.left
                                 anchors.verticalCenter: parent.verticalCenter
                             }
-                            DankDropdown {
+                            DDropdown {
                                 id: zoneBrightDrop
                                 width: 120
                                 anchors.right: parent.right
@@ -1884,10 +2036,10 @@ PluginComponent {
                             spacing: 4
 
                             Row {
-                                spacing: 4
+                                spacing: Theme.spacingXS
                                 DIcon {
                                     name: "info"
-                                    size: 16
+                                    size: Theme.iconSizeSmall
                                     color: Theme.primary
                                     anchors.verticalCenter: parent.verticalCenter
                                 }
@@ -1902,7 +2054,7 @@ PluginComponent {
                                 width: parent.width
                                 wrapMode: Text.WordWrap
                                 text: "2025+ Acer laptops control RGB over i2c-HID rather than WMI. If LEDs do not update, use the standalone 'kbrgb' hidraw tool."
-                                font.pixelSize: 11
+                                font.pixelSize: Theme.fontSizeSmall
                                 color: Theme.surfaceVariantText
                             }
                         }
@@ -2046,7 +2198,7 @@ PluginComponent {
 
                             Rectangle {
                                 height: 24
-                                radius: 4
+                                radius: Theme.cornerRadiusSmall
                                 color: Theme.primaryContainer
                                 implicitWidth: activeLabel.implicitWidth + Theme.spacingM * 2
 
@@ -2164,8 +2316,8 @@ PluginComponent {
                                         text: "Reboot Now"
                                         iconName: "restart_alt"
                                         backgroundColor: Theme.error
-                                        textColor: "#FFFFFF"
-                                        onClicked: rebootProcess.running = true
+                                        textColor: Theme.onError
+                                        onClicked: SessionService.reboot()
                                     }
                                     DButton {
                                         text: "Dismiss"
@@ -2209,7 +2361,7 @@ PluginComponent {
                                 DButton {
                                     text: "Confirm & Switch"
                                     backgroundColor: Theme.error
-                                    textColor: "#FFFFFF"
+                                    textColor: Theme.onError
                                     onClicked: {
                                         root.setGpu(panel.pendingGpu);
                                         panel.pendingGpu = "";
@@ -2269,7 +2421,7 @@ PluginComponent {
                             Rectangle {
                                 width: parent.width
                                 height: 32
-                                radius: 4
+                                radius: Theme.cornerRadiusSmall
                                 color: Theme.surfaceContainerLowest
                                 border.color: Theme.outlineVariant
                                 border.width: 1
@@ -2280,7 +2432,7 @@ PluginComponent {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: root.gpuData.envyInstallCmd || "sudo pip install envycontrol"
                                     font.family: "monospace"
-                                    font.pixelSize: 11
+                                    font.pixelSize: Theme.fontSizeSmall
                                     color: Theme.surfaceText
                                 }
                             }

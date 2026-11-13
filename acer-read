@@ -1,17 +1,176 @@
 #!/bin/sh
 # Telemetry reader (unprivileged) for the Acer Sense Dux Shell plugin.
-# Usage: acer-read [sysfs|gpu]
-#   sysfs  -> profile, CPU temp, fans, battery, limiter, usb_charging,
+# Usage: acer-read [sysfs|gpu|pill]
+#   sysfs  -> profile, CPU temp, fans, limiter, usb_charging,
 #             backlight_timeout, battery_calibration, boot_animation_sound,
 #             lcd_override, four_zone_mode, per_zone_mode, turbo_state,
-#             powerSource, helper check, etc.
-#   gpu    -> nvidia-smi (temp/power/util) + envycontrol --query
+#             helper check, etc.
+#   gpu    -> nvidia-smi (temp/power/util) + envycontrol --query (caches static lspci)
+#   pill   -> fast lightweight CPU temp + fan RPM read for bar pill
 # Output: single-line JSON for JSON.parse in QML.
 set -eu
 
 mode="${1:-sysfs}"
-
 read_raw() { cat "$1" 2>/dev/null || true; }
+
+hwmon_by_name() {
+    for d in /sys/class/hwmon/hwmon*; do
+        [ -r "$d/name" ] || continue
+        if [ "$(cat "$d/name" 2>/dev/null)" = "$1" ]; then
+            printf '%s' "$d"
+            return 0
+        fi
+    done
+    return 1
+}
+
+# Fast lightweight pill read
+if [ "$mode" = "pill" ]; then
+    cpuTemp=""
+    core=$(hwmon_by_name coretemp || true)
+    if [ -n "$core" ]; then
+        raw=$(read_raw "$core/temp1_input")
+        [ -n "$raw" ] && cpuTemp=$((raw / 1000))
+    fi
+    if [ -z "$cpuTemp" ]; then
+        amd=$(hwmon_by_name k10temp || hwmon_by_name zenpower || true)
+        if [ -n "$amd" ]; then
+            raw=$(read_raw "$amd/temp1_input")
+            [ -n "$raw" ] && cpuTemp=$((raw / 1000))
+        fi
+    fi
+    fanCpu=""
+    acer=$(hwmon_by_name acer || true)
+    if [ -n "$acer" ]; then
+        fanCpu=$(read_raw "$acer/fan1_input")
+    fi
+    printf '{"cpuTemp":%s,"fanCpu":%s}\n' "${cpuTemp:-null}" "${fanCpu:-null}"
+    exit 0
+fi
+
+jnum() { if [ -n "${2:-}" ]; then printf '"%s":%s' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
+jstr() { if [ -n "${2:-}" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
+jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true' "$1"; else printf '"%s":false' "$1"; fi; }
+
+if [ "$mode" = "gpu" ]; then
+    runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
+    [ -d "$runtime_dir" ] && [ -w "$runtime_dir" ] || runtime_dir="/tmp"
+    gpu_cache="$runtime_dir/.acer_gpu_static"
+
+    hasIgpu="false"
+    hasDgpu="false"
+    hardwareMux="dynamic"
+    igpuName=""
+    dgpuName=""
+    hasEnvyControl="false"
+    envyCmd="sudo pip install envycontrol"
+
+    if [ -f "$gpu_cache" ]; then
+        . "$gpu_cache" 2>/dev/null || true
+    else
+        if command -v envycontrol >/dev/null 2>&1; then
+            hasEnvyControl="true"
+        fi
+
+        lspci_out=$(lspci 2>/dev/null || true)
+        vga_lines=$(printf '%s\n' "$lspci_out" | grep -iE 'VGA compatible controller|Display controller|3D controller' || true)
+
+        if printf '%s\n' "$vga_lines" | grep -qE '\b(Intel|ATI|AMD|Radeon)\b'; then
+            hasIgpu="true"
+            igpuName=$(printf '%s\n' "$vga_lines" | grep -E '\b(Intel|ATI|AMD|Radeon)\b' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
+        fi
+
+        if printf '%s\n' "$vga_lines" | grep -qi 'NVIDIA'; then
+            hasDgpu="true"
+            dgpuName=$(printf '%s\n' "$vga_lines" | grep -i 'NVIDIA' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
+        fi
+
+        if [ "$hasDgpu" = "true" ] && [ "$hasIgpu" = "false" ]; then
+            hardwareMux="discrete"
+        elif [ "$hasIgpu" = "true" ] && [ "$hasDgpu" = "false" ]; then
+            hardwareMux="integrated"
+        fi
+
+        if [ -f /etc/os-release ]; then
+            . /etc/os-release 2>/dev/null || true
+        fi
+        os_id="${ID:-}"
+        os_like="${ID_LIKE:-}"
+        case "$os_id $os_like" in
+            *arch*|*cachyos*|*manjaro*|*endeavouros*)
+                if command -v yay >/dev/null 2>&1; then
+                    envyCmd="yay -S envycontrol"
+                elif command -v paru >/dev/null 2>&1; then
+                    envyCmd="paru -S envycontrol"
+                else
+                    envyCmd="yay -S envycontrol"
+                fi
+                ;;
+            *fedora*|*nobara*|*rhel*|*centos*)
+                envyCmd="sudo dnf copr enable sunwire/envycontrol && sudo dnf install python3-envycontrol"
+                ;;
+            *debian*|*ubuntu*|*pop*|*mint*)
+                if command -v pipx >/dev/null 2>&1; then
+                    envyCmd="sudo pipx install envycontrol"
+                else
+                    envyCmd="sudo pip install --break-system-packages envycontrol"
+                fi
+                ;;
+            *opensuse*|*suse*)
+                envyCmd="sudo zypper in python3-envycontrol || sudo pip install envycontrol"
+                ;;
+        esac
+
+        # Save to cache
+        cat <<EOF > "$gpu_cache" 2>/dev/null || true
+hasIgpu="$hasIgpu"
+hasDgpu="$hasDgpu"
+hardwareMux="$hardwareMux"
+igpuName="$igpuName"
+dgpuName="$dgpuName"
+hasEnvyControl="$hasEnvyControl"
+envyCmd="$envyCmd"
+EOF
+    fi
+
+    gtemp=""; gpow=""; gutil=""; gmode=""
+    hasEnvyControl="false"
+    if command -v envycontrol >/dev/null 2>&1; then
+        hasEnvyControl="true"
+        gmode=$(envycontrol --query 2>/dev/null | tr -d '[:space:]' || true)
+    fi
+    if [ "$hardwareMux" = "discrete" ]; then
+        gmode="discrete"
+    elif [ "$hardwareMux" = "integrated" ]; then
+        [ -z "$gmode" ] && gmode="integrated"
+    fi
+
+    # Only query nvidia-smi if dGPU is present and not forced off in integrated mode
+    if [ "$hasDgpu" = "true" ] && [ "$gmode" != "integrated" ] && command -v nvidia-smi >/dev/null 2>&1; then
+        line=$(nvidia-smi --query-gpu=temperature.gpu,power.draw,utilization.gpu \
+                --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
+        if [ -n "$line" ]; then
+            gtemp=$(printf '%s' "$line" | awk -F',' '{gsub(/[^0-9.]/,"",$1); print $1}')
+            gpow=$(printf '%s' "$line"  | awk -F',' '{gsub(/[^0-9.]/,"",$2); print $2}')
+            gutil=$(printf '%s' "$line" | awk -F',' '{gsub(/[^0-9.]/,"",$3); print $3}')
+        fi
+    fi
+
+    printf '{'
+    jbool hasEnvyControl "$hasEnvyControl"; printf ','
+    jbool hasIgpu "$hasIgpu"; printf ','
+    jbool hasDgpu "$hasDgpu"; printf ','
+    jstr hardwareMux "$hardwareMux"; printf ','
+    jstr igpuName "$igpuName"; printf ','
+    jstr dgpuName "$dgpuName"; printf ','
+    jnum gpuTemp "$gtemp"; printf ','
+    jnum gpuPower "$gpow"; printf ','
+    jnum gpuUtil "$gutil"; printf ','
+    jstr gpuMode "$gmode"; printf ','
+    jstr envyInstallCmd "$envyCmd"
+    printf '}\n'
+    exit 0
+fi
 
 # Locate linuwu-sense predator_sense or nitro_sense directory
 NS=""
@@ -44,116 +203,6 @@ for d in /sys/devices/platform/acer-wmi/turbo_sense \
         break
     fi
 done
-
-hwmon_by_name() {
-    for d in /sys/class/hwmon/hwmon*; do
-        [ -r "$d/name" ] || continue
-        if [ "$(cat "$d/name" 2>/dev/null)" = "$1" ]; then
-            printf '%s' "$d"
-            return 0
-        fi
-    done
-    return 1
-}
-
-jnum() { if [ -n "${2:-}" ]; then printf '"%s":%s' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
-jstr() { if [ -n "${2:-}" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
-jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true' "$1"; else printf '"%s":false' "$1"; fi; }
-
-if [ "$mode" = "gpu" ]; then
-    gtemp=""; gpow=""; gutil=""; gmode=""
-    hasEnvyControl="false"
-    if command -v nvidia-smi >/dev/null 2>&1; then
-        line=$(nvidia-smi --query-gpu=temperature.gpu,power.draw,utilization.gpu \
-                --format=csv,noheader,nounits 2>/dev/null | head -1 || true)
-        if [ -n "$line" ]; then
-            gtemp=$(printf '%s' "$line" | awk -F',' '{gsub(/[^0-9.]/,"",$1); print $1}')
-            gpow=$(printf '%s' "$line"  | awk -F',' '{gsub(/[^0-9.]/,"",$2); print $2}')
-            gutil=$(printf '%s' "$line" | awk -F',' '{gsub(/[^0-9.]/,"",$3); print $3}')
-        fi
-    fi
-    if command -v envycontrol >/dev/null 2>&1; then
-        hasEnvyControl="true"
-        gmode=$(envycontrol --query 2>/dev/null | tr -d '[:space:]' || true)
-    fi
-
-    hasIgpu="false"
-    hasDgpu="false"
-    igpuName=""
-    dgpuName=""
-    hardwareMux="dynamic"
-
-    lspci_out=$(lspci 2>/dev/null || true)
-    vga_lines=$(printf '%s\n' "$lspci_out" | grep -iE 'VGA compatible controller|Display controller|3D controller' || true)
-
-    if printf '%s\n' "$vga_lines" | grep -qE '\b(Intel|ATI|AMD|Radeon)\b'; then
-        hasIgpu="true"
-        igpuName=$(printf '%s\n' "$vga_lines" | grep -E '\b(Intel|ATI|AMD|Radeon)\b' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
-    fi
-
-    if printf '%s\n' "$vga_lines" | grep -qi 'NVIDIA'; then
-        hasDgpu="true"
-        dgpuName=$(printf '%s\n' "$vga_lines" | grep -i 'NVIDIA' | head -1 | sed -E 's/^[0-9a-fA-F:.]* [^:]*: //')
-    fi
-
-    # Hardware MUX state:
-    # If dGPU is present but NO iGPU is detected, the laptop is in BIOS/Hardware Discrete GPU Only mode
-    # If both are present, it is in Hybrid/Optimus (Dual GPU) mode
-    # If iGPU is present but NO dGPU is detected, it is in Integrated Only mode
-    if [ "$hasDgpu" = "true" ] && [ "$hasIgpu" = "false" ]; then
-        hardwareMux="discrete"
-        gmode="discrete"
-    elif [ "$hasIgpu" = "true" ] && [ "$hasDgpu" = "false" ]; then
-        hardwareMux="integrated"
-        [ -z "$gmode" ] && gmode="integrated"
-    fi
-
-    envyCmd="sudo pip install envycontrol"
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release 2>/dev/null || true
-    fi
-    os_id="${ID:-}"
-    os_like="${ID_LIKE:-}"
-    case "$os_id $os_like" in
-        *arch*|*cachyos*|*manjaro*|*endeavouros*)
-            if command -v yay >/dev/null 2>&1; then
-                envyCmd="yay -S envycontrol"
-            elif command -v paru >/dev/null 2>&1; then
-                envyCmd="paru -S envycontrol"
-            else
-                envyCmd="yay -S envycontrol"
-            fi
-            ;;
-        *fedora*|*nobara*|*rhel*|*centos*)
-            envyCmd="sudo dnf copr enable sunwire/envycontrol && sudo dnf install python3-envycontrol"
-            ;;
-        *debian*|*ubuntu*|*pop*|*mint*)
-            if command -v pipx >/dev/null 2>&1; then
-                envyCmd="sudo pipx install envycontrol"
-            else
-                envyCmd="sudo pip install --break-system-packages envycontrol"
-            fi
-            ;;
-        *opensuse*|*suse*)
-            envyCmd="sudo zypper in python3-envycontrol || sudo pip install envycontrol"
-            ;;
-    esac
-
-    printf '{'
-    jbool hasEnvyControl "$hasEnvyControl"; printf ','
-    jbool hasIgpu "$hasIgpu"; printf ','
-    jbool hasDgpu "$hasDgpu"; printf ','
-    jstr hardwareMux "$hardwareMux"; printf ','
-    jstr igpuName "$igpuName"; printf ','
-    jstr dgpuName "$dgpuName"; printf ','
-    jnum gpuTemp "$gtemp"; printf ','
-    jnum gpuPower "$gpow"; printf ','
-    jnum gpuUtil "$gutil"; printf ','
-    jstr gpuMode "$gmode"; printf ','
-    jstr envyInstallCmd "$envyCmd"
-    printf '}\n'
-    exit 0
-fi
 
 # Platform profile
 profile=$(read_raw /sys/firmware/acpi/platform_profile)
@@ -194,28 +243,6 @@ if [ -z "$cpuTemp" ]; then
     done
 fi
 
-# Battery detection (find first available BAT*)
-battPct=""; battStatus=""; battCycles=""
-for bat in /sys/class/power_supply/BAT*; do
-    if [ -d "$bat" ]; then
-        battPct=$(read_raw "$bat/capacity")
-        battStatus=$(read_raw "$bat/status")
-        battCycles=$(read_raw "$bat/cycle_count")
-        break
-    fi
-done
-
-# AC Power detection
-powerSource="BAT"
-for ac in /sys/class/power_supply/AC* /sys/class/power_supply/ACAD* /sys/class/power_supply/ADP*; do
-    if [ -d "$ac" ] && [ -r "$ac/online" ]; then
-        if [ "$(read_raw "$ac/online")" = "1" ]; then
-            powerSource="AC"
-            break
-        fi
-    fi
-done
-
 # Linuwu-Sense core nodes
 battLimiter=""; usbCharging=""; fanSpeed=""
 backlightTimeout=""; batteryCalibration=""; bootAnimationSound=""; lcdOverride=""
@@ -252,15 +279,18 @@ if [ -n "$TURBO_DIR" ] && [ -r "$TURBO_DIR/turbo_state" ]; then
     turboState=$(read_raw "$TURBO_DIR/turbo_state")
 fi
 
-# Privileged helper detection (caches verification for 60s to prevent auth log spam)
+# Privileged helper detection (cached in $XDG_RUNTIME_DIR to prevent auth log spam)
 hasHelper="false"
 helperInstalled="false"
-if [ -x "/usr/local/bin/acer-ctl" ]; then
+runtime_dir="${XDG_RUNTIME_DIR:-/tmp}"
+[ -d "$runtime_dir" ] && [ -w "$runtime_dir" ] || runtime_dir="/tmp"
+cache="$runtime_dir/.acer_helper_ok"
+if [ -f "$cache" ]; then
+    hasHelper="true"
     helperInstalled="true"
-    cache="/tmp/.acer_helper_ok"
-    if [ -f "$cache" ] && [ -n "$(find "$cache" -mmin -1 2>/dev/null)" ]; then
-        hasHelper="true"
-    elif sudo -n /usr/local/bin/acer-ctl ping >/dev/null 2>&1; then
+elif [ -x "/usr/local/bin/acer-ctl" ]; then
+    helperInstalled="true"
+    if sudo -n /usr/local/bin/acer-ctl ping >/dev/null 2>&1; then
         touch "$cache" 2>/dev/null || true
         hasHelper="true"
     fi
@@ -274,16 +304,12 @@ jbool hasTurbo "$hasTurbo"; printf ','
 jbool hasEnek5130 "$hasEnek5130"; printf ','
 jbool hasHelper "$hasHelper"; printf ','
 jbool helperInstalled "$helperInstalled"; printf ','
-jstr powerSource "$powerSource"; printf ','
 jstr profile "$profile"; printf ','
 jstr profileChoices "$profileChoices"; printf ','
 jnum cpuTemp "$cpuTemp"; printf ','
 jnum fanCpu "$fanCpu"; printf ','
 jnum fanGpu "$fanGpu"; printf ','
 jstr fanSpeed "$fanSpeed"; printf ','
-jnum battPct "$battPct"; printf ','
-jstr battStatus "$battStatus"; printf ','
-jnum battCycles "$battCycles"; printf ','
 jnum battLimiter "$battLimiter"; printf ','
 jnum usbCharging "$usbCharging"; printf ','
 jnum backlightTimeout "$backlightTimeout"; printf ','

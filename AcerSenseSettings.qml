@@ -3,6 +3,7 @@ import Quickshell.Io
 import qs.Common
 import qs.Services
 import qs.Widgets
+import qs.DCommon.Widgets
 
 FocusScope {
     id: root
@@ -33,7 +34,7 @@ FocusScope {
 
     function copyInstallCommand() {
         const cmd = "sudo sh \"" + root.pluginPath + "/helper/install.sh\"";
-        clipboardProcess.command = ["sh", "-c", "printf '%s' \"$1\" | (wl-copy 2>/dev/null || dms clipboard copy 2>/dev/null || xclip -selection clipboard 2>/dev/null)", "--", cmd];
+        clipboardProcess.command = ["dms", "cl", "copy", cmd];
         clipboardProcess.running = true;
         ToastService.showInfo("Install command copied to clipboard!");
     }
@@ -110,7 +111,7 @@ FocusScope {
                     width: parent.width
                     spacing: Theme.spacingXS
 
-                    DankIcon {
+                    DIcon {
                         name: root.helperInstalled ? "check_circle" : "warning"
                         size: Theme.iconSizeSmall
                         color: root.helperInstalled ? Theme.primary : Theme.warning
@@ -149,7 +150,7 @@ FocusScope {
                         wrapMode: Text.Wrap
                         text: "sudo sh \"" + root.pluginPath + "/helper/install.sh\""
                         font.family: "monospace"
-                        font.pixelSize: 11
+                        font.pixelSize: Theme.fontSizeSmall
                         color: Theme.surfaceText
                     }
                 }
@@ -158,7 +159,7 @@ FocusScope {
                     width: parent.width
                     spacing: Theme.spacingS
 
-                    DankButton {
+                    DButton {
                         width: (parent.width - Theme.spacingS) / 2
                         text: "Authenticate"
                         iconName: "key"
@@ -167,7 +168,7 @@ FocusScope {
                         onClicked: root.runPkexecInstall()
                     }
 
-                    DankButton {
+                    DButton {
                         width: (parent.width - Theme.spacingS) / 2
                         text: "Copy Command"
                         iconName: "content_copy"
@@ -189,7 +190,7 @@ FocusScope {
                 font.pixelSize: Theme.fontSizeMedium
                 color: Theme.surfaceText
             }
-            DankButtonGroup {
+            DButtonGroup {
                 width: parent.width
                 model: ["Nothing", "CPU temp", "Fan RPM"]
                 currentIndex: root.pillKeys.indexOf(root.pillContent)
@@ -209,7 +210,6 @@ FocusScope {
             }
         }
 
-
         // Poll Interval
         Column {
             width: parent.width
@@ -220,7 +220,7 @@ FocusScope {
                 font.pixelSize: Theme.fontSizeMedium
                 color: Theme.surfaceText
             }
-            DankDropdown {
+            DDropdown {
                 width: parent.width
                 currentValue: String(root.pollInterval)
                 options: ["2", "4", "6", "10"]

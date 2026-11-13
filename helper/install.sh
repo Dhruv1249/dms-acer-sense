@@ -12,7 +12,7 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "uninstall" ]; then
         echo "Error: Uninstall must be run with root privileges (sudo or pkexec)." >&2
         exit 1
     fi
-    rm -f /usr/local/bin/acer-ctl /etc/sudoers.d/acer-ctl /usr/local/bin/nitro-ctl /etc/sudoers.d/nitro-ctl
+    rm -f /usr/local/bin/acer-ctl /etc/sudoers.d/acer-ctl /usr/local/bin/nitro-ctl /etc/sudoers.d/nitro-ctl "${XDG_RUNTIME_DIR:-/tmp}/.acer_helper_ok" /tmp/.acer_helper_ok
     echo "Success: acer-ctl helper and sudoers rule have been removed."
     exit 0
 fi
