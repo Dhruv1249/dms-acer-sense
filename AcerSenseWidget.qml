@@ -86,16 +86,30 @@ PluginComponent {
             root.refreshGpu();
     }
 
-    Component.onCompleted: {
-        if (typeof DgopService !== "undefined" && DgopService.addRef) {
+    property bool cpuSubscribed: false
+    function updateCpuSubscription() {
+        if (typeof DgopService === "undefined" || !DgopService.addRef)
+            return;
+        const needed = (root.pillContent === "cpuTemp");
+        if (needed && !root.cpuSubscribed) {
             DgopService.addRef(["cpu"]);
+            root.cpuSubscribed = true;
+        } else if (!needed && root.cpuSubscribed) {
+            DgopService.removeRef(["cpu"]);
+            root.cpuSubscribed = false;
         }
+    }
+    onPillContentChanged: updateCpuSubscription()
+
+    Component.onCompleted: {
+        updateCpuSubscription();
         root.refreshSysfs();
     }
 
     Component.onDestruction: {
-        if (typeof DgopService !== "undefined" && DgopService.removeRef) {
+        if (root.cpuSubscribed && typeof DgopService !== "undefined" && DgopService.removeRef) {
             DgopService.removeRef(["cpu"]);
+            root.cpuSubscribed = false;
         }
     }
 
@@ -860,7 +874,7 @@ PluginComponent {
                     radius: Theme.cornerRadius
                     color: Theme.surfaceContainerHigh
                     border.color: Theme.warning
-                    border.width: 1
+                    border.width: Theme.outlineWidth
                     implicitHeight: noticeCol.implicitHeight + Theme.spacingM * 2
 
                     Column {
@@ -907,7 +921,7 @@ PluginComponent {
                     radius: Theme.cornerRadius
                     color: Theme.surfaceContainerHigh
                     border.color: Theme.warning
-                    border.width: 1
+                    border.width: Theme.outlineWidth
                     implicitHeight: helperNoticeCol.implicitHeight + Theme.spacingM * 2
 
                     Column {
@@ -1337,7 +1351,7 @@ PluginComponent {
                             radius: Theme.cornerRadius
                             color: Theme.surfaceContainerHigh
                             border.color: root.telemetry.batteryCalibration === 1 ? Theme.primary : "transparent"
-                            border.width: 1
+                            border.width: Theme.outlineWidth
                             implicitHeight: calibCol.implicitHeight + Theme.spacingS * 2
 
                             Column {
@@ -1621,7 +1635,7 @@ PluginComponent {
                                         anchors.verticalCenter: parent.verticalCenter
                                         color: "#" + root.rgbColorHex
                                         border.color: Theme.outlineVariant
-                                        border.width: 1
+                                        border.width: Theme.outlineWidth
 
                                         DIcon {
                                             name: "colorize"
@@ -1710,7 +1724,7 @@ PluginComponent {
                                         radius: Theme.cornerRadiusSmall
                                         color: "#" + modelData.hex
                                         border.color: root.rgbColorHex === modelData.hex ? Theme.primary : Theme.outlineVariant
-                                        border.width: root.rgbColorHex === modelData.hex ? 2 : 1
+                                        border.width: root.rgbColorHex === modelData.hex ? Theme.outlineWidthFocused : Theme.outlineWidth
                                         MouseArea {
                                             anchors.fill: parent
                                             cursorShape: Qt.PointingHandCursor
@@ -1755,7 +1769,7 @@ PluginComponent {
                                     radius: Theme.cornerRadius
                                     color: "#" + modelData.hex
                                     border.color: (root.activeZoneIndex === index + 1 || root.activeZoneIndex === 0) ? Theme.primary : Theme.outlineVariant
-                                    border.width: (root.activeZoneIndex === index + 1) ? 3 : 1
+                                    border.width: (root.activeZoneIndex === index + 1) ? Theme.outlineWidthFocused : Theme.outlineWidth
 
                                     Rectangle {
                                         anchors.centerIn: parent
@@ -1819,7 +1833,7 @@ PluginComponent {
                                     anchors.verticalCenter: parent.verticalCenter
                                     color: "#" + root.currentActiveZoneHex()
                                     border.color: Theme.outlineVariant
-                                    border.width: 1
+                                    border.width: Theme.outlineWidth
 
                                     DIcon {
                                         name: "colorize"
@@ -1910,7 +1924,7 @@ PluginComponent {
                                     radius: Theme.cornerRadiusSmall
                                     color: "#" + modelData.hex
                                     border.color: root.currentActiveZoneHex() === modelData.hex ? Theme.primary : Theme.outlineVariant
-                                    border.width: root.currentActiveZoneHex() === modelData.hex ? 2 : 1
+                                    border.width: root.currentActiveZoneHex() === modelData.hex ? Theme.outlineWidthFocused : Theme.outlineWidth
 
                                     MouseArea {
                                         anchors.fill: parent
@@ -1996,7 +2010,7 @@ PluginComponent {
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
                         border.color: Theme.primary
-                        border.width: 1
+                        border.width: Theme.outlineWidth
                         implicitHeight: enekCol.implicitHeight + Theme.spacingS * 2
 
                         Column {
@@ -2129,7 +2143,7 @@ PluginComponent {
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
                         border.color: Theme.outlineVariant
-                        border.width: 1
+                        border.width: Theme.outlineWidth
                         implicitHeight: muxCol.implicitHeight + Theme.spacingM * 2
 
                         Column {
@@ -2206,7 +2220,7 @@ PluginComponent {
                             radius: Theme.cornerRadius
                             color: Theme.surfaceContainerHighest
                             border.color: Theme.primary
-                            border.width: 1
+                            border.width: Theme.outlineWidth
                             implicitHeight: switchingCol.implicitHeight + Theme.spacingM * 2
 
                             Column {
@@ -2248,7 +2262,7 @@ PluginComponent {
                             radius: Theme.cornerRadius
                             color: Theme.surfaceContainerHigh
                             border.color: Theme.warning
-                            border.width: 1
+                            border.width: Theme.outlineWidth
                             implicitHeight: rebootCol.implicitHeight + Theme.spacingM * 2
 
                             Column {
@@ -2354,7 +2368,7 @@ PluginComponent {
                         radius: Theme.cornerRadius
                         color: Theme.surfaceContainerHigh
                         border.color: Theme.warning
-                        border.width: 1
+                        border.width: Theme.outlineWidth
                         implicitHeight: envyCol.implicitHeight + Theme.spacingM * 2
 
                         Column {
@@ -2394,7 +2408,7 @@ PluginComponent {
                                 radius: Theme.cornerRadiusSmall
                                 color: Theme.surfaceContainerLowest
                                 border.color: Theme.outlineVariant
-                                border.width: 1
+                                border.width: Theme.outlineWidth
 
                                 StyledText {
                                     anchors.left: parent.left

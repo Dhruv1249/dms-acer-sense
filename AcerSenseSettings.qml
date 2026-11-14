@@ -4,11 +4,11 @@ import qs.Common
 import qs.Services
 import qs.Widgets
 import qs.DCommon.Widgets
+import qs.Modules.Plugins
 
-FocusScope {
+PluginSettings {
     id: root
-
-    property var pluginService: null
+    pluginId: "acerSensePro"
 
     readonly property var pillKeys: ["none", "cpuTemp", "fanRpm"]
     property string pillContent: "cpuTemp"
@@ -21,11 +21,10 @@ FocusScope {
     height: implicitHeight
 
     function load(key, def) {
-        return pluginService ? pluginService.loadPluginData("acerSensePro", key, def) : def;
+        return root.loadValue(key, def);
     }
     function save(key, val) {
-        if (pluginService)
-            pluginService.savePluginData("acerSensePro", key, val);
+        root.saveValue(key, val);
     }
 
     function checkHelper() {
@@ -98,7 +97,7 @@ FocusScope {
             radius: Theme.cornerRadius
             color: Theme.surfaceContainerHigh
             border.color: root.helperInstalled ? Theme.primary : Theme.warning
-            border.width: 1
+            border.width: Theme.outlineWidth
             implicitHeight: helperCardCol.implicitHeight + Theme.spacingM * 2
 
             Column {
