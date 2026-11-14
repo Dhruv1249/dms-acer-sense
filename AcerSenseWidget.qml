@@ -330,16 +330,15 @@ PluginComponent {
     }
 
     function ppdForProfile(p) {
+        // Only return a slug for exact 1:1 matches so that power-profiles-daemon
+        // does not overwrite Acer's official hardware intermediate profiles
+        // (such as 'quiet', 'cool', and 'balanced-performance').
         switch (p) {
         case "low-power":
-        case "quiet":
             return "power-saver";
-        case "cool":
         case "balanced":
             return "balanced";
-        case "balanced-performance":
         case "performance":
-        case "turbo":
             return "performance";
         }
         return "";
@@ -617,6 +616,7 @@ PluginComponent {
         onExited: (code, status) => {
             if (code === 0) {
                 ToastService.showInfo("Helper installed successfully! Controls unlocked.");
+                sysfsProcess.running = false;
                 root.refreshSysfs();
             } else {
                 ToastService.showError("Installation failed or cancelled (code: " + code + ")");
@@ -631,7 +631,7 @@ PluginComponent {
 
     Process {
         id: screenPickerProcess
-        command: ["dms", "color", "pick", "--hex", "-l", "--raw"]
+        command: ["dms", "color", "pick", "--hex", "-l", "--raw", "--allow-multiple"]
         running: false
         property int targetZone: -1
         stdout: SplitParser {
