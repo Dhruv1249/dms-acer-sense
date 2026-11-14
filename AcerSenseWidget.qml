@@ -77,8 +77,7 @@ PluginComponent {
         } else {
             profileFileView.reload();
             root.refreshSysfs();
-            if (root.activeTab === root.gpuTabIndex)
-                root.refreshGpu();
+            root.refreshGpu();
         }
     }
     onActiveTabChanged: {
@@ -104,6 +103,7 @@ PluginComponent {
     Component.onCompleted: {
         updateCpuSubscription();
         root.refreshSysfs();
+        root.refreshGpu();
     }
 
     Component.onDestruction: {
@@ -585,9 +585,9 @@ PluginComponent {
     Timer {
         id: gpuTimer
         interval: 5000
-        running: root.popoutVisible && root.activeTab === root.gpuTabIndex
+        running: root.popoutVisible && (root.activeTab === root.gpuTabIndex || root.gpuData.hardwareMux === "discrete")
         repeat: true
-        triggeredOnStart: true
+        triggeredOnStart: false
         onTriggered: root.refreshGpu()
     }
 
