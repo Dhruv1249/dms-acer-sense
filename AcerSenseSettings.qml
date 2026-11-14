@@ -234,7 +234,7 @@ FocusScope {
         // Credits & Version
         Column {
             width: parent.width
-            spacing: 2
+            spacing: Theme.spacingXXS
 
             StyledText {
                 text: "Acer Sense v2.0.0 — Fork by Dhruv1249"

@@ -24,30 +24,6 @@ hwmon_by_name() {
     return 1
 }
 
-# Fast lightweight pill read
-if [ "$mode" = "pill" ]; then
-    cpuTemp=""
-    core=$(hwmon_by_name coretemp || true)
-    if [ -n "$core" ]; then
-        raw=$(read_raw "$core/temp1_input")
-        [ -n "$raw" ] && cpuTemp=$((raw / 1000))
-    fi
-    if [ -z "$cpuTemp" ]; then
-        amd=$(hwmon_by_name k10temp || hwmon_by_name zenpower || true)
-        if [ -n "$amd" ]; then
-            raw=$(read_raw "$amd/temp1_input")
-            [ -n "$raw" ] && cpuTemp=$((raw / 1000))
-        fi
-    fi
-    fanCpu=""
-    acer=$(hwmon_by_name acer || true)
-    if [ -n "$acer" ]; then
-        fanCpu=$(read_raw "$acer/fan1_input")
-    fi
-    printf '{"cpuTemp":%s,"fanCpu":%s}\n' "${cpuTemp:-null}" "${fanCpu:-null}"
-    exit 0
-fi
-
 jnum() { if [ -n "${2:-}" ]; then printf '"%s":%s' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
 jstr() { if [ -n "${2:-}" ]; then printf '"%s":"%s"' "$1" "$2"; else printf '"%s":null' "$1"; fi; }
 jbool() { if [ "${2:-}" = "true" ] || [ "${2:-}" = "1" ]; then printf '"%s":true' "$1"; else printf '"%s":false' "$1"; fi; }

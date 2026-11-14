@@ -27,15 +27,6 @@ for d in /sys/devices/platform/acer-wmi/four_zoned_kb \
     fi
 done
 
-TURBO_DIR=""
-for d in /sys/devices/platform/acer-wmi/turbo_sense \
-         /sys/module/linuwu_sense/drivers/platform:acer-wmi/acer-wmi/turbo_sense; do
-    if [ -d "$d" ]; then
-        TURBO_DIR="$d"
-        break
-    fi
-done
-
 need_ns() {
     [ -n "$NS" ] || { echo "Error: linuwu-sense not found (nitro_sense/predator_sense sysfs node missing)" >&2; exit 1; }
 }
@@ -191,19 +182,6 @@ case "$action" in
             safe_write "$val" "$RGB_DIR/per_zone_mode"
         else
             echo "Error: rgb-zones requires 'hex1,hex2,hex3,hex4,brightness(0-100)' (e.g. ff0000,00ff00,0000ff,ffffff,100)" >&2
-            exit 1
-        fi
-        ;;
-    turbo)
-        val="${1:-}"
-        if [ -n "$TURBO_DIR" ] && [ -w "$TURBO_DIR/turbo_state" ]; then
-            case "$val" in
-                on|1)  safe_write "1" "$TURBO_DIR/turbo_state" ;;
-                off|0) safe_write "0" "$TURBO_DIR/turbo_state" ;;
-                *) echo "Error: turbo must be on|off" >&2; exit 1 ;;
-            esac
-        else
-            echo "Error: turbo_sense sysfs not writable or not supported on this model" >&2
             exit 1
         fi
         ;;

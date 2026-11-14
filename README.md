@@ -47,7 +47,7 @@ A comprehensive laptop control center for **Acer Nitro / Predator** laptops in y
 
 ## Requirements
 
-1. **Dux Shell** (or DankMaterialShell) ≥ 1.4.0
+1. **Dux Shell** (or DankMaterialShell) ≥ 2.0.0
 2. An **Acer Nitro or Predator** gaming laptop with the **[linuwu-sense](https://github.com/0x7375646F/Linuwu-Sense)** DKMS kernel module installed and loaded.
 3. *Optional:* `nvidia-smi` and `envycontrol` for discrete GPU monitoring and switching.
 
@@ -137,7 +137,6 @@ sudo sh ~/.config/dms/plugins/acerSensePro/helper/install.sh
 ## Settings
 
 - **Pill Content** — Configure what is shown next to the bar icon: CPU temp, Fan RPM, or icon only.
-- **Fan Quiet Speed (%)** — The fan percentage used by the "Quiet" preset (default: 40%).
 - **Telemetry Refresh Interval** — Sysfs polling frequency (2s, 4s, 6s, or 10s).
 - **Helper Status Card** — Visual indicator of helper installation, with one-click install and copy buttons.
 

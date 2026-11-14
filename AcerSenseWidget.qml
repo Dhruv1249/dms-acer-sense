@@ -88,14 +88,14 @@ PluginComponent {
 
     Component.onCompleted: {
         if (typeof DgopService !== "undefined" && DgopService.addRef) {
-            DgopService.addRef("acerSensePro");
+            DgopService.addRef(["cpu"]);
         }
         root.refreshSysfs();
     }
 
     Component.onDestruction: {
         if (typeof DgopService !== "undefined" && DgopService.removeRef) {
-            DgopService.removeRef("acerSensePro");
+            DgopService.removeRef(["cpu"]);
         }
     }
 
@@ -196,40 +196,20 @@ PluginComponent {
 
     popoutWidth: Math.min(Theme.dialogMaxWidth, 440)
 
-    component SegSelector: Row {
+    component SegSelector: DButtonGroup {
         id: seg
         property var labels: []
         property int current: -1
         signal picked(int index)
-        spacing: Theme.spacingXS
 
-        Repeater {
-            model: seg.labels
-            Rectangle {
-                width: (seg.width - seg.spacing * (seg.labels.length - 1)) / Math.max(1, seg.labels.length)
-                height: Theme.buttonHeightS
-                radius: Theme.cornerRadius
-                color: index === seg.current ? Theme.primary : (cellArea.containsMouse ? Theme.surfaceContainerHighest : Theme.surfaceContainerHigh)
-
-                StyledText {
-                    anchors.centerIn: parent
-                    width: parent.width - 4
-                    horizontalAlignment: Text.AlignHCenter
-                    wrapMode: Text.NoWrap
-                    elide: Text.ElideRight
-                    text: modelData
-                    color: index === seg.current ? Theme.onPrimary : Theme.surfaceText
-                    font.pixelSize: seg.labels.length >= 5 ? Theme.fontSizeXSmall : Theme.fontSizeSmall
-                }
-
-                MouseArea {
-                    id: cellArea
-                    anchors.fill: parent
-                    hoverEnabled: true
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: seg.picked(index)
-                }
-            }
+        model: seg.labels
+        currentIndex: seg.current
+        checkEnabled: false
+        fillWidth: true
+        size: seg.labels.length >= 5 ? "small" : "medium"
+        onSelectionChanged: (index, selected) => {
+            if (selected)
+                seg.picked(index);
         }
     }
 
@@ -369,9 +349,11 @@ PluginComponent {
         root.platformProfile = p;
         runCtl(["profile", p], "Profile: " + p);
         const ppd = root.ppdForProfile(p);
-        if (ppd && !ppdProcess.running) {
-            ppdProcess.command = ["/usr/bin/powerprofilesctl", "set", ppd];
-            ppdProcess.running = true;
+        if (ppd && typeof PowerProfileWatcher !== "undefined" && PowerProfileWatcher.available) {
+            const parsed = PowerProfileWatcher.parseProfileSlug ? PowerProfileWatcher.parseProfileSlug(ppd) : -1;
+            if (parsed !== -1) {
+                PowerProfileWatcher.applyProfile(parsed);
+            }
         }
     }
 
@@ -648,11 +630,6 @@ PluginComponent {
     }
 
     Process {
-        id: ppdProcess
-        running: false
-    }
-
-    Process {
         id: screenPickerProcess
         command: ["dms", "color", "pick", "--hex", "-l", "--raw"]
         running: false
@@ -833,7 +810,7 @@ PluginComponent {
                                 height: Theme.buttonHeightXS
                                 radius: Theme.cornerRadiusSmall
                                 color: Theme.error
-                                width: turboRow.implicitWidth + 8
+                                width: turboRow.implicitWidth + Theme.spacingS
                                 anchors.verticalCenter: parent.verticalCenter
 
                                 Row {
@@ -1285,30 +1262,20 @@ PluginComponent {
                                 }
 
                                 // Quick Speed Presets (sets both fans)
-                                Row {
+                                DButtonGroup {
                                     width: parent.width
-                                    spacing: Theme.spacingXS
-
-                                    Repeater {
-                                        model: [30, 45, 60, 75, 90]
-                                        Rectangle {
-                                            width: (parent.width - Theme.spacingXS * 4) / 5
-                                            height: Theme.buttonHeightXS
-                                            radius: Theme.cornerRadius
-                                            color: (root.customCpuFan === modelData && root.customGpuFan === modelData) ? Theme.primary : Theme.surfaceContainerHighest
-
-                                            StyledText {
-                                                anchors.centerIn: parent
-                                                text: modelData + "%"
-                                                font.pixelSize: Theme.fontSizeXSmall
-                                                color: (root.customCpuFan === modelData && root.customGpuFan === modelData) ? Theme.onPrimary : Theme.surfaceText
-                                            }
-
-                                            MouseArea {
-                                                anchors.fill: parent
-                                                cursorShape: Qt.PointingHandCursor
-                                                onClicked: root.setBothFans(modelData)
-                                            }
+                                    fillWidth: true
+                                    checkEnabled: false
+                                    size: "small"
+                                    model: ["30%", "45%", "60%", "75%", "90%"]
+                                    readonly property var presetValues: [30, 45, 60, 75, 90]
+                                    currentIndex: (root.customCpuFan === root.customGpuFan) ? presetValues.indexOf(root.customCpuFan) : -1
+                                    onSelectionChanged: (index, selected) => {
+                                        if (selected && index >= 0 && index < presetValues.length) {
+                                            const val = presetValues[index];
+                                            root.setBothFans(val);
+                                            root.customExplicitlyPicked = true;
+                                            root.setFanDual(val, val);
                                         }
                                     }
                                 }
@@ -1630,7 +1597,7 @@ PluginComponent {
 
                             Item {
                                 width: parent.width
-                                height: Math.max(34, hexField.height)
+                                height: Math.max(Theme.buttonHeightS, hexField.height)
 
                                 StyledText {
                                     text: "Color (#" + root.rgbColorHex.toUpperCase() + ")"
@@ -1706,7 +1673,7 @@ PluginComponent {
                             // Rainbow Hue spectrum slider bar
                             Rectangle {
                                 width: parent.width
-                                height: 16
+                                height: Theme.iconSizeSmall
                                 radius: Theme.cornerRadiusSmall
                                 gradient: Gradient {
                                     orientation: Gradient.Horizontal
@@ -1906,7 +1873,7 @@ PluginComponent {
                         // Rainbow Hue spectrum slider bar for zones
                         Rectangle {
                             width: parent.width
-                            height: 16
+                            height: Theme.iconSizeSmall
                             radius: Theme.cornerRadiusSmall
                             gradient: Gradient {
                                 orientation: Gradient.Horizontal
@@ -2423,7 +2390,7 @@ PluginComponent {
 
                             Rectangle {
                                 width: parent.width
-                                height: 32
+                                height: Theme.buttonHeightS
                                 radius: Theme.cornerRadiusSmall
                                 color: Theme.surfaceContainerLowest
                                 border.color: Theme.outlineVariant
