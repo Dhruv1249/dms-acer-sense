@@ -1129,6 +1129,7 @@ PluginComponent {
                                         }
 
                                         DTextField {
+                                            id: cpuFanField
                                             width: Theme.buttonHeightM + Theme.spacingS
                                             text: String(root.customCpuFan)
                                             onEditingFinished: {
@@ -1136,10 +1137,15 @@ PluginComponent {
                                                 if (!isNaN(n)) {
                                                     var snapped = Math.max(20, Math.min(100, Math.round(n / 5) * 5));
                                                     root.customCpuFan = snapped;
-                                                    text = String(snapped);
-                                                } else {
-                                                    text = String(root.customCpuFan);
                                                 }
+                                                text = String(root.customCpuFan);
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: root
+                                            function onCustomCpuFanChanged() {
+                                                cpuFanField.text = String(root.customCpuFan);
                                             }
                                         }
 
@@ -1223,6 +1229,7 @@ PluginComponent {
                                         }
 
                                         DTextField {
+                                            id: gpuFanField
                                             width: Theme.buttonHeightM + Theme.spacingS
                                             text: String(root.customGpuFan)
                                             onEditingFinished: {
@@ -1230,10 +1237,15 @@ PluginComponent {
                                                 if (!isNaN(n)) {
                                                     var snapped = Math.max(20, Math.min(100, Math.round(n / 5) * 5));
                                                     root.customGpuFan = snapped;
-                                                    text = String(snapped);
-                                                } else {
-                                                    text = String(root.customGpuFan);
                                                 }
+                                                text = String(root.customGpuFan);
+                                            }
+                                        }
+
+                                        Connections {
+                                            target: root
+                                            function onCustomGpuFanChanged() {
+                                                gpuFanField.text = String(root.customGpuFan);
                                             }
                                         }
 

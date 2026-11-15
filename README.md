@@ -17,13 +17,13 @@ A comprehensive laptop control center for **Acer Nitro / Predator** laptops in y
 ## ✨ Features
 
 - **Power Profiles** — Switch between Low-Power / Quiet / Balanced / Performance / Turbo (`platform_profile` synchronized with `power-profiles-daemon`).
-- **Fan Control** — Auto, Max, and **Custom Fan Speeds** (interactive sliders and numeric inputs with step size 5, CPU & GPU link option, and quick presets).
+- **Fan Control** — Auto, Max, and **Custom Fan Speeds** (separate interactive sliders and numeric inputs for CPU and GPU with step size 5, plus 30/45/60/75/90% quick preset buttons).
 - **Keyboard RGB Lighting (`four_zoned_kb`)**:
-  - **Dynamic Effects**: 8 lighting modes (Static, Breathing, Neon, Wave, Shifting, Zoom, Meteor, Twinkling) with Speed (0–9), Brightness (0–100%), Direction (L→R / R→L), and color picker presets.
+  - **Dynamic Effects**: 8 lighting modes (Static, Breathing, Neon, Wave, Shifting, Zoom, Meteor, Twinkling) with Speed (1–9), Brightness (0–100%), Direction (L→R / R→L), and color picker presets.
   - **Per-Zone Colors**: 4-zone interactive keyboard visualizer with individual zone color pickers, brightness control, and quick presets (Predator Cyan, Rainbow, Cyberpunk).
   - Compatibility notice for 2025+ models using ENEK5130 i2c-HID controllers.
 - **Battery Management**:
-  - Live charge level, charging status, and cycle count.
+  - Live charge level and charging status.
   - **80% Charge Limiter** toggle to preserve battery lifespan.
   - **Battery Calibration** cycle (100% → 0% → 100%) with safety confirmation.
   - **USB Power-off Charging** cutoff selector (Off, 10%, 20%, 30%).
