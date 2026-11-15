@@ -103,7 +103,6 @@ PluginComponent {
     Component.onCompleted: {
         updateCpuSubscription();
         root.refreshSysfs();
-        root.refreshGpu();
     }
 
     Component.onDestruction: {
