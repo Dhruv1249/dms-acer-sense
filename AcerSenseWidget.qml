@@ -450,15 +450,15 @@ PluginComponent {
     }
 
     function zoneTextColor(hex) {
-        const c = root.hexToRgb(hex || "000000");
-        const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        return lum > 140 ? "#000000" : "#FFFFFF";
+        const c = Qt.color(hex ? ("#" + hex.replace("#", "")) : "#000000");
+        return Theme.isLightColor(c) ? Theme.contrastDark : Theme.contrastLight;
     }
 
     function zoneTextBg(hex) {
-        const c = root.hexToRgb(hex || "000000");
-        const lum = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        return lum > 140 ? "rgba(0, 0, 0, 0.18)" : "rgba(255, 255, 255, 0.22)";
+        const c = Qt.color(hex ? ("#" + hex.replace("#", "")) : "#000000");
+        return Theme.isLightColor(c)
+            ? Theme.withAlpha(Theme.contrastDark, 0.18)
+            : Theme.withAlpha(Theme.contrastLight, 0.22);
     }
 
     function hexToRgb(hex) {

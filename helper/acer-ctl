@@ -212,7 +212,20 @@ case "$action" in
         val="${1:-}"
         case "$val" in
             hybrid|integrated|nvidia)
-                command -v envycontrol >/dev/null 2>&1 || { echo "Error: envycontrol not found. Install envycontrol via your package manager or pip (e.g. yay -S envycontrol, dnf copr enable sunwire/envycontrol, or sudo pip install envycontrol)" >&2; exit 1; }
+                ENVY_BIN=""
+                if command -v envycontrol >/dev/null 2>&1; then
+                    ENVY_BIN="envycontrol"
+                elif [ -x /usr/local/bin/envycontrol ]; then
+                    owner=$(stat -c %u /usr/local/bin/envycontrol 2>/dev/null || stat -f %u /usr/local/bin/envycontrol 2>/dev/null || echo -1)
+                    if [ "$owner" = "0" ]; then
+                        ENVY_BIN="/usr/local/bin/envycontrol"
+                    fi
+                fi
+
+                if [ -z "$ENVY_BIN" ]; then
+                    echo "Error: envycontrol not found. Install envycontrol via your package manager or pip (e.g. yay -S envycontrol, dnf copr enable sunwire/envycontrol, or sudo pip install envycontrol)" >&2
+                    exit 1
+                fi
 
                 # Hardware safety check: check if an Intel or AMD iGPU exists on the PCI bus
                 vga_devs=$(lspci 2>/dev/null | grep -iE 'VGA compatible controller|Display controller' || true)
@@ -234,7 +247,7 @@ case "$action" in
                     fi
                 fi
 
-                envycontrol -s "$val" ;;
+                "$ENVY_BIN" -s "$val" ;;
             *) echo "Error: gpu mode must be hybrid|integrated|nvidia" >&2; exit 1 ;;
         esac
         ;;

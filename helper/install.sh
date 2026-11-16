@@ -12,7 +12,7 @@ if [ "${1:-}" = "--uninstall" ] || [ "${1:-}" = "uninstall" ]; then
         echo "Error: Uninstall must be run with root privileges (sudo or pkexec)." >&2
         exit 1
     fi
-    rm -f /usr/local/bin/acer-ctl /etc/sudoers.d/acer-ctl /usr/local/bin/nitro-ctl /etc/sudoers.d/nitro-ctl "${XDG_RUNTIME_DIR:-/tmp}/.acer_helper_ok" /tmp/.acer_helper_ok
+    rm -f /usr/local/bin/acer-ctl /etc/sudoers.d/acer-ctl "${XDG_RUNTIME_DIR:-/tmp}/.acer_helper_ok" /tmp/.acer_helper_ok
     echo "Success: acer-ctl helper and sudoers rule have been removed."
     exit 0
 fi
@@ -47,8 +47,5 @@ printf '%s ALL=(root) NOPASSWD: /usr/local/bin/acer-ctl\n' "$USER_NAME" > "$TMP"
 visudo -cf "$TMP"
 install -o root -g root -m 0440 "$TMP" /etc/sudoers.d/acer-ctl
 visudo -cf /etc/sudoers.d/acer-ctl
-
-# 3) Cleanup legacy nitro-ctl if present
-rm -f /usr/local/bin/nitro-ctl /etc/sudoers.d/nitro-ctl
 
 echo "Success: acer-ctl installed in /usr/local/bin/acer-ctl with passwordless sudo rule for $USER_NAME."
